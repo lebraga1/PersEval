@@ -30,10 +30,20 @@ class PerspectivistDataset:
         self.user_adaptation = None
         self.named = None
         self.extended = None
+        
+
         self.adaptation_test_user_ids = None
         self.train_user_ids = None
         self.adaptation_text_ids = None
         self.test_text_ids  = None
+        
+    def available_labels(self):
+        """Return the labels available for this dataset."""
+        return list(self.labels.keys())
+
+    def default_label(self):
+        """Return the default label for this dataset."""
+        return self.label
 
     def describe_splits(self):
         if not self.training_set.users:
@@ -980,3 +990,83 @@ class MD(PerspectivistDataset):
 
         self.check_splits(user_adaptation, extended, named)
         self.describe_splits()        
+        
+_DATASETS = {
+    "epic": lambda: Epic(config.dataset_label["EPIC"]),
+    "brexit": Brexit,
+    "dices": lambda: DICES(config.dataset_label["DICES-350"]),
+    "mhs": lambda: MHS(config.dataset_label["MHS"]),
+    "md": lambda: MD(config.dataset_label["MD"]),
+}
+
+def available_datasets():
+    """
+    Return the names of all datasets available through the public API.
+    """
+    return list(_DATASETS.keys())
+
+def download(dataset_name):
+    """
+    Download and initialize a dataset.
+
+    Parameters
+    ----------
+    dataset_name : str
+        Dataset name. Case-insensitive.
+
+    Returns
+    -------
+    PerspectivistDataset
+        Initialized dataset object.
+    """
+    if not isinstance(dataset_name, str):
+        raise TypeError("dataset_name must be a string")
+
+    dataset_name = dataset_name.lower()
+
+    if dataset_name not in _DATASETS:
+        available = ", ".join(available_datasets())
+        raise ValueError(
+            f"Unknown dataset '{dataset_name}'. "
+            f"Available datasets: {available}"
+        )
+
+    return _DATASETS[dataset_name]()    
+
+def download_and_split(dataset_name, user_adaptation=False, extended=False, named=False, baseline=False,):
+    """
+    Download a dataset and generate its requested task split.
+
+    Parameters
+    ----------
+    dataset_name : str
+        Dataset name. Case-insensitive.
+
+    user_adaptation : bool or str
+        False, "train", or "test".
+
+    extended : bool
+        Whether to allow training/test text overlap.
+
+    named : bool
+        Whether to use named user representations.
+
+    baseline : bool
+        Whether to allow the baseline configuration.
+
+    Returns
+    -------
+    PerspectivistDataset
+        Dataset with training, adaptation and test splits.
+    """
+    
+    dataset = download(dataset_name)
+
+    dataset.get_splits(
+        extended=extended,
+        user_adaptation=user_adaptation,
+        named=named,
+        baseline=baseline,
+    )
+
+    return dataset
