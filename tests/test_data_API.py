@@ -116,6 +116,10 @@ def test_describe():
     dataset.label = "irony"
     dataset.key_user = "user"
     dataset.key_text = "text_id"
+    
+    dataset.labels = {
+        "irony": set(),
+    }
 
     dataset.dataset = [
         {
@@ -146,6 +150,40 @@ def test_describe():
 
     assert description["default_label"] == "irony"
     assert "irony" in description["labels"]
+
+def test_describe_verbose(capsys):
+    dataset = data_module.PerspectivistDataset()
+
+    dataset.name = "EPIC"
+    dataset.label = "irony"
+    dataset.key_user = "user"
+    dataset.key_text = "text_id"
+
+    dataset.labels = {
+        "irony": set(),
+    }
+
+    dataset.dataset = [
+        {"user": 1, "text_id": 10},
+        {"user": 1, "text_id": 11},
+        {"user": 2, "text_id": 10},
+    ]
+
+    description = dataset.describe(verbose=True)
+
+    captured = capsys.readouterr()
+
+    assert description["name"] == "EPIC"
+    assert "EPIC" in captured.out
+    assert "Task:" in captured.out
+    assert "Annotators:" in captured.out
+    assert "Texts:" in captured.out
+    assert "Instances:" in captured.out
+    assert "Annotations/text:" in captured.out
+    assert "Annotations/annotator:" in captured.out
+    assert "Labels:" in captured.out
+    assert "Default label:" in captured.out
+    assert "Metadata:" in captured.out
 
 
 def test_describe_datasets(monkeypatch):
@@ -183,23 +221,11 @@ def test_describe_datasets(monkeypatch):
     fake_dataset.describe.assert_called()
 
 
-def test_describe_datasets_verbose(monkeypatch, capsys):
+def test_describe_datasets_verbose(monkeypatch):
     fake_dataset = Mock()
 
     fake_dataset.describe.return_value = {
         "name": "EPIC",
-        "task": "Irony",
-        "annotators": 74,
-        "texts": 3000,
-        "instances": 14172,
-        "annotations_per_text": 14172 / 3000,
-        "annotations_per_annotator": 14172 / 74,
-        "source": "Twitter, Reddit",
-        "label_type": "Binary",
-        "positive_class": "Irony",
-        "metadata": ["Gender", "Nationality", "Age/Generation"],
-        "labels": ["irony"],
-        "default_label": "irony",
     }
 
     monkeypatch.setattr(
@@ -210,20 +236,9 @@ def test_describe_datasets_verbose(monkeypatch, capsys):
 
     descriptions = data_module.describe_datasets(verbose=True)
 
-    captured = capsys.readouterr()
-
     assert isinstance(descriptions, dict)
 
-    assert "EPIC" in captured.out
-    assert "Task:" in captured.out
-    assert "Annotators:" in captured.out
-    assert "Texts:" in captured.out
-    assert "Instances:" in captured.out
-    assert "Annotations/text:" in captured.out
-    assert "Annotations/annotator:" in captured.out
-    assert "Labels:" in captured.out
-    assert "Default label:" in captured.out
-    assert "Metadata:" in captured.out
+    fake_dataset.describe.assert_called_with(verbose=True)
     
 def test_public_api():
     import perseval
