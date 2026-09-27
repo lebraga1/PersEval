@@ -79,10 +79,69 @@ label_map = {
 
 dataset_label ={
     "EPIC": "irony",
-    "DICES-350":"degree_of_harm",
+    #"DICES-350":"degree_of_harm",
+    "DICES":"degree-of-harm",
     "BREXIT":"hs",
     "MHS":"hateful",
     "MD":"offensiveness"
+}
+
+dataset_info = {
+    "EPIC": {
+        "task": "Irony",
+        "annotators": 74,
+        "texts": 3000,
+        "instances": 14172,
+        "source": "Twitter, Reddit",
+        "label_type": "Binary",
+        "positive_class": "Irony",
+        "metadata": ["Gender", "Nationality", "Age/Generation"],
+    },
+    "BREXIT": {
+        "task": "Abusive Language",
+        "annotators": 6,
+        "texts": 1120,
+        "instances": 3872,
+        "source": "Twitter",
+        "label_type": "Binary",
+        "positive_class": "Offensiveness",
+        "metadata": ["Target and control group"],
+    },
+    "MHS": {
+        "task": "Hate Speech",
+        "annotators": 7912,
+        "texts": 39565,
+        "instances": 135556,
+        "source": "YouTube, Twitter, Reddit",
+        "label_type": "Binary",
+        "positive_class": "Hate Speech",
+        "metadata": ["Gender", "Age/Generation", "Education", "Income"],
+    },
+    "MD": {
+        "task": "Offensiveness",
+        "annotators": 819,
+        "texts": 10753,
+        "instances": 53765,
+        "source": "Twitter",
+        "label_type": "Binary",
+        "positive_class": "Offensiveness",
+        "metadata": [],
+    },
+    "DICES": {
+        "task": "AI Safety",
+        "annotators": 123,
+        "texts": 350,
+        "instances": 43050,
+        "source": "Human-chatbot conversations",
+        "label_type": "Non-binary",
+        "positive_class": "Harmful",
+        "metadata": [
+            "Gender",
+            "Age/Generation",
+            "Education",
+            "Ethnicity",
+        ],
+    },
 }
 
 model_config = {
