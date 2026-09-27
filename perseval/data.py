@@ -1065,10 +1065,18 @@ _DATASETS = {
     "md": lambda: MD(config.dataset_label["MD"]),
 }
 
-def available_datasets():
+def available_datasets(verbose=False):
     """Return information about the available datasets.
 
-    This function does not download or load any dataset.
+    Parameters
+    ----------
+    verbose : bool
+        If True, print the dataset information in a readable format.
+
+    Returns
+    -------
+    dict
+        Information about the available datasets.
     """
 
     datasets = {}
@@ -1079,6 +1087,16 @@ def available_datasets():
             **info,
             "default_label": config.dataset_label[name],
         }
+
+    if verbose:
+        for name, info in datasets.items():
+            print(f"\n{'=' * 60}")
+            print(f"Dataset: {name}")
+            print(f"{'=' * 60}")
+
+            for key, value in info.items():
+                if key != "name":
+                    print(f"{key}: {value}")
 
     return datasets
 
