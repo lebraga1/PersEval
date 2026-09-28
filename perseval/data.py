@@ -41,9 +41,75 @@ class PerspectivistDataset:
         """Return the labels available for this dataset."""
         return list(self.labels.keys())
 
-    def default_label(self):
-        """Return the default label for this dataset."""
-        return self.label
+    def describe(self, verbose=False):
+        """Return statistics and metadata about this dataset.
+
+        Parameters
+        ----------
+        verbose : bool
+            If True, print a human-readable summary.
+
+        Returns
+        -------
+        dict
+            Dataset description and statistics.
+        """
+
+        users = set()
+        texts = set()
+
+        for row in self.dataset:
+            users.add(row[self.key_user])
+            texts.add(row[self.key_text])
+
+        instances = len(self.dataset)
+        annotators = len(users)
+        n_texts = len(texts)
+
+        description = {
+            "name": self.name,
+            "task": config.dataset_info[self.name]["task"],
+            "annotators": annotators,
+            "texts": n_texts,
+            "instances": instances,
+            "annotations_per_text": (
+                instances / n_texts if n_texts else 0
+            ),
+            "annotations_per_annotator": (
+                instances / annotators if annotators else 0
+            ),
+            "source": config.dataset_info[self.name]["source"],
+            "label_type": config.dataset_info[self.name]["label_type"],
+            "positive_class": config.dataset_info[self.name]["positive_class"],
+            "metadata": config.dataset_info[self.name]["metadata"],
+            "labels": self.available_labels(),
+            "default_label": self.label,
+        }
+
+        if verbose:
+            print(f"\n{description['name']}")
+            print("-" * len(description["name"]))
+
+            print(f"Task:                  {description['task']}")
+            print(f"Annotators:            {description['annotators']}")
+            print(f"Texts:                 {description['texts']}")
+            print(f"Instances:             {description['instances']}")
+            print(
+                f"Annotations/text:      "
+                f"{description['annotations_per_text']:.2f}"
+            )
+            print(
+                f"Annotations/annotator: "
+                f"{description['annotations_per_annotator']:.2f}"
+            )
+            print(f"Source:                {description['source']}")
+            print(f"Label type:            {description['label_type']}")
+            print(f"Positive class:        {description['positive_class']}")
+            print(f"Labels:                {description['labels']}")
+            print(f"Default label:         {description['default_label']}")
+            print(f"Metadata:              {description['metadata']}")
+
+        return description
 
     def describe_splits(self):
         if not self.training_set.users:
@@ -994,16 +1060,45 @@ class MD(PerspectivistDataset):
 _DATASETS = {
     "epic": lambda: Epic(config.dataset_label["EPIC"]),
     "brexit": Brexit,
-    "dices": lambda: DICES(config.dataset_label["DICES-350"]),
+    "dices": lambda: DICES(config.dataset_label["DICES"]),
     "mhs": lambda: MHS(config.dataset_label["MHS"]),
     "md": lambda: MD(config.dataset_label["MD"]),
 }
 
-def available_datasets():
+def available_datasets(verbose=False):
+    """Return information about the available datasets.
+
+    Parameters
+    ----------
+    verbose : bool
+        If True, print the dataset information in a readable format.
+
+    Returns
+    -------
+    dict
+        Information about the available datasets.
     """
-    Return the names of all datasets available through the public API.
-    """
-    return list(_DATASETS.keys())
+
+    datasets = {}
+
+    for name, info in config.dataset_info.items():
+        datasets[name] = {
+            "name": name,
+            **info,
+            "default_label": config.dataset_label[name],
+        }
+
+    if verbose:
+        for name, info in datasets.items():
+            print(f"\n{'=' * 60}")
+            print(f"Dataset: {name}")
+            print(f"{'=' * 60}")
+
+            for key, value in info.items():
+                if key != "name":
+                    print(f"{key}: {value}")
+
+    return datasets
 
 def download(dataset_name):
     """
@@ -1025,7 +1120,7 @@ def download(dataset_name):
     dataset_name = dataset_name.lower()
 
     if dataset_name not in _DATASETS:
-        available = ", ".join(available_datasets())
+        available = ", ".join(_DATASETS.keys())
         raise ValueError(
             f"Unknown dataset '{dataset_name}'. "
             f"Available datasets: {available}"
@@ -1070,3 +1165,14 @@ def download_and_split(dataset_name, user_adaptation=False, extended=False, name
     )
 
     return dataset
+
+def describe_datasets(verbose=False):
+    """Describe all available datasets."""
+
+    descriptions = {}
+
+    for name in config.dataset_info:
+        dataset = download(name)
+        descriptions[name] = dataset.describe(verbose=verbose)
+
+    return descriptions
