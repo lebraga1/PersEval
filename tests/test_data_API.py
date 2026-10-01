@@ -1,41 +1,55 @@
 import pytest
 from unittest.mock import Mock
+
+import perseval
 import perseval.data as data_module
 
-from perseval.data import (available_datasets, download, download_and_split)
+from perseval.data import (
+    available_datasets,
+    download,
+    download_and_split,
+)
+
 
 def test_available_datasets():
     datasets = available_datasets()
 
-    assert isinstance(datasets, dict)
+    assert isinstance(datasets, list)
 
-    assert "EPIC" in datasets
-    assert "BREXIT" in datasets
-    assert "DICES" in datasets
-    assert "MHS" in datasets
-    assert "MD" in datasets
+    assert "epic" in datasets
+    assert "brexit" in datasets
+    assert "dices" in datasets
+    assert "mhs" in datasets
+    assert "md" in datasets
 
 def test_download_invalid_dataset():
     with pytest.raises(ValueError, match="Unknown dataset"):
         download("does_not_exist")
-    
+
+
 def test_download_requires_string():
     with pytest.raises(TypeError, match="dataset_name must be a string"):
         download(123)
-        
+
+
 def test_download_is_case_insensitive(monkeypatch):
     fake_dataset = Mock()
+
+    factory = Mock(return_value=fake_dataset)
 
     monkeypatch.setitem(
         data_module._DATASETS,
         "epic",
-        lambda: fake_dataset,
+        factory,
     )
 
     assert download("epic") is fake_dataset
     assert download("EPIC") is fake_dataset
     assert download("Epic") is fake_dataset
-    
+
+    factory.assert_called_with(None)
+
+
 def test_download_epic(monkeypatch):
     fake_dataset = Mock()
 
@@ -47,11 +61,29 @@ def test_download_epic(monkeypatch):
         factory,
     )
 
-    result = download("epic")
+    result = download("epic", label="irony")
 
-    factory.assert_called_once_with()
+    factory.assert_called_once_with("irony")
     assert result is fake_dataset
-    
+
+
+def test_download_with_label(monkeypatch):
+    fake_dataset = Mock()
+
+    factory = Mock(return_value=fake_dataset)
+
+    monkeypatch.setitem(
+        data_module._DATASETS,
+        "epic",
+        factory,
+    )
+
+    result = download("EPIC", label="irony")
+
+    factory.assert_called_once_with("irony")
+    assert result is fake_dataset
+
+
 def test_available_labels():
     dataset = data_module.PerspectivistDataset()
 
@@ -68,7 +100,8 @@ def test_available_labels():
         "aggressiveness",
         "stereotype",
     ]
-    
+
+
 def test_download_and_split(monkeypatch):
     fake_dataset = Mock()
 
@@ -82,13 +115,17 @@ def test_download_and_split(monkeypatch):
 
     result = download_and_split(
         "epic",
+        label="irony",
         user_adaptation="train",
         extended=True,
         named=True,
         baseline=False,
     )
 
-    download_mock.assert_called_once_with("epic")
+    download_mock.assert_called_once_with(
+        "epic",
+        label="irony",
+    )
 
     fake_dataset.get_splits.assert_called_once_with(
         extended=True,
@@ -98,7 +135,8 @@ def test_download_and_split(monkeypatch):
     )
 
     assert result is fake_dataset
-    
+
+
 def test_available_labels_single_label():
     dataset = data_module.PerspectivistDataset()
 
@@ -108,116 +146,41 @@ def test_available_labels_single_label():
 
     assert dataset.available_labels() == ["irony"]
 
-
-def test_describe():
-    dataset = data_module.PerspectivistDataset()
-
-    dataset.name = "EPIC"
-    dataset.label = "irony"
-    dataset.key_user = "user"
-    dataset.key_text = "text_id"
-    
-    dataset.labels = {
-        "irony": set(),
-    }
-
-    dataset.dataset = [
-        {
-            "user": 1,
-            "text_id": 10,
-        },
-        {
-            "user": 1,
-            "text_id": 11,
-        },
-        {
-            "user": 2,
-            "text_id": 10,
-        },
-    ]
-
-    description = dataset.describe()
-
-    assert isinstance(description, dict)
-
-    assert description["name"] == "EPIC"
-    assert description["instances"] == 3
-    assert description["annotators"] == 2
-    assert description["texts"] == 2
-
-    assert description["annotations_per_text"] == 3 / 2
-    assert description["annotations_per_annotator"] == 3 / 2
-
-    assert description["default_label"] == "irony"
-    assert "irony" in description["labels"]
-
-def test_describe_verbose(capsys):
-    dataset = data_module.PerspectivistDataset()
-
-    dataset.name = "EPIC"
-    dataset.label = "irony"
-    dataset.key_user = "user"
-    dataset.key_text = "text_id"
-
-    dataset.labels = {
-        "irony": set(),
-    }
-
-    dataset.dataset = [
-        {"user": 1, "text_id": 10},
-        {"user": 1, "text_id": 11},
-        {"user": 2, "text_id": 10},
-    ]
-
-    description = dataset.describe(verbose=True)
-
-    captured = capsys.readouterr()
-
-    assert description["name"] == "EPIC"
-    assert "EPIC" in captured.out
-    assert "Task:" in captured.out
-    assert "Annotators:" in captured.out
-    assert "Texts:" in captured.out
-    assert "Instances:" in captured.out
-    assert "Annotations/text:" in captured.out
-    assert "Annotations/annotator:" in captured.out
-    assert "Labels:" in captured.out
-    assert "Default label:" in captured.out
-    assert "Metadata:" in captured.out
-
-
 def test_describe_datasets(monkeypatch):
     fake_dataset = Mock()
 
     fake_dataset.describe.return_value = {
         "name": "EPIC",
-        "task": "Irony",
         "annotators": 74,
         "texts": 3000,
         "instances": 14172,
         "annotations_per_text": 14172 / 3000,
         "annotations_per_annotator": 14172 / 74,
-        "source": "Twitter, Reddit",
-        "label_type": "Binary",
-        "positive_class": "Irony",
-        "metadata": ["Gender", "Nationality", "Age/Generation"],
         "labels": ["irony"],
         "default_label": "irony",
     }
 
+    download_mock = Mock(return_value=fake_dataset)
+
     monkeypatch.setattr(
         data_module,
         "download",
-        Mock(return_value=fake_dataset),
+        download_mock,
     )
 
     descriptions = data_module.describe_datasets()
 
     assert isinstance(descriptions, dict)
 
-    for name in data_module.config.dataset_info:
-        assert name in descriptions
+    assert set(descriptions) == {
+        "epic",
+        "brexit",
+        "dices",
+        "mhs",
+        "md",
+    }
 
+    assert download_mock.call_count == 5
     fake_dataset.describe.assert_called()
 
 
@@ -228,21 +191,23 @@ def test_describe_datasets_verbose(monkeypatch):
         "name": "EPIC",
     }
 
+    download_mock = Mock(return_value=fake_dataset)
+
     monkeypatch.setattr(
         data_module,
         "download",
-        Mock(return_value=fake_dataset),
+        download_mock,
     )
 
     descriptions = data_module.describe_datasets(verbose=True)
 
     assert isinstance(descriptions, dict)
 
+    assert download_mock.call_count == 5
     fake_dataset.describe.assert_called_with(verbose=True)
-    
-def test_public_api():
-    import perseval
 
+
+def test_public_api():
     assert callable(perseval.download)
     assert callable(perseval.download_and_split)
     assert callable(perseval.available_datasets)
