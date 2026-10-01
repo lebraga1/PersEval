@@ -68,22 +68,24 @@ def main():
     args = parse_args()
 
     # initialize the dataset
+    perspectivist_dataset = download_and_split(
+        args.dataset_name,
+        label=args.label,
+        user_adaptation=args.adaptation,
+        extended=args.extended,
+        named=args.named
+    )
+
     if args.dataset_name == "Epic":
-        perspectivist_dataset = Epic(args.label)
         prompts = EPIC
     elif args.dataset_name == "Brexit":
-        perspectivist_dataset = Brexit()
         prompts = BREXIT
     elif args.dataset_name == "DICES":
-        perspectivist_dataset = DICES(args.label)
         prompts = DICES_prompts
     elif args.dataset_name == "MHS":
-        perspectivist_dataset = MHS(args.label)
         prompts = MHS_prompts
     elif args.dataset_name == "MD":
-        perspectivist_dataset = MD(args.label)
         prompts = MD_Agreement
-    perspectivist_dataset.get_splits(user_adaptation=args.adaptation, extended=args.extended, named=args.named)
     
     # create the model
     if args.type=='llm':
