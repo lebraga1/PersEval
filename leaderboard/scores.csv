@@ -1,0 +1,24 @@
+dataset,label,model,method,representation,named,adaptation,extended,global_macro_f1,annotator_macro_f1,text_macro_f1
+BREXIT,hs,Llama-3.1-8B-Instruct,Base zero,none,false,train,false,0.459,0.451,0.753
+BREXIT,hs,Llama-3.1-8B-Instruct,Perspective prompting,Group,true,train,false,0.475,0.466,0.797
+BREXIT,hs,Mixtral-8x7B-Instruct-v0.1,Base zero,none,false,train,false,0.383,0.376,0.768
+BREXIT,hs,Mixtral-8x7B-Instruct-v0.1,Perspective prompting,Group,true,train,false,0.405,0.398,0.729
+BREXIT,hs,Llama-3.1-8B-Instruct,LaMP,none,false,test,false,0.407,0.402,0.383
+BREXIT,hs,Llama-3.1-8B-Instruct,LaMP,Group,true,test,false,0.481,0.481,0.454
+BREXIT,hs,Mixtral-8x7B-Instruct-v0.1,LaMP,none,false,test,false,0.651,0.632,0.736
+BREXIT,hs,Mixtral-8x7B-Instruct-v0.1,LaMP,Group,true,test,false,0.627,0.615,0.722
+DICES,Q2_harmful_content_overall,Llama-3.1-8B-Instruct,Base zero,none,false,train,false,0.290,0.282,0.310
+DICES,Q2_harmful_content_overall,Mixtral-8x7B-Instruct-v0.1,Base zero,none,false,train,false,0.232,0.228,0.402
+DICES,Q2_harmful_content_overall,Llama-3.1-8B-Instruct,LaMP,none,false,test,false,0.355,0.340,0.425
+DICES,Q2_harmful_content_overall,Mixtral-8x7B-Instruct-v0.1,LaMP,none,false,test,false,0.306,0.356,0.443
+EPIC,irony,Llama-3.1-8B-Instruct,Base zero,none,false,train,false,0.399,0.534,0.592
+EPIC,irony,Mixtral-8x7B-Instruct-v0.1,Base zero,none,false,train,false,0.405,0.479,0.620
+EPIC,irony,Llama-3.1-8B-Instruct,LaMP,none,false,test,false,0.433,0.425,0.427
+EPIC,irony,Mixtral-8x7B-Instruct-v0.1,LaMP,none,false,test,false,0.562,0.546,0.534
+MD,offensiveness,Llama-3.1-8B-Instruct,Base zero,none,false,train,false,0.398,0.397,0.528
+MD,offensiveness,Llama-3.1-8B-Instruct,LaMP,none,false,test,false,0.604,0.545,0.581
+MD,offensiveness,Mixtral-8x7B-Instruct-v0.1,LaMP,none,false,test,false,0.447,0.582,0.708
+MHS,hateful,Llama-3.1-8B-Instruct,Base zero,none,false,train,false,0.419,0.489,0.603
+MHS,hateful,Mixtral-8x7B-Instruct-v0.1,Base zero,none,false,train,false,0.437,0.514,0.624
+MHS,hateful,Llama-3.1-8B-Instruct,LaMP,none,false,test,false,0.666,0.624,0.659
+MHS,hateful,Mixtral-8x7B-Instruct-v0.1,LaMP,none,false,test,false,0.713,0.672,0.726
