@@ -1,27 +1,44 @@
 seed = 42
 
+# Datasets with "strategy": "legacy" keep the split used in the PersEval paper.
+# Any dataset without an entry here is split automatically (see auto_split below).
 dataset_specific_splits = {
     "EPIC": {
+        "strategy": "legacy",
         "user_based_split_percentage" : 0.2,
         "text_based_split_percentage" : 0.05,
     },
     "DICES": {
+        "strategy": "legacy",
         "user_based_split_percentage" : 0.2,
         "text_based_split_percentage" : 0.05,
     },
     "BREXIT": {
+        "strategy": "legacy",
         "user_based_split_percentage" : 0.2,
         "text_based_split_percentage_train" : 0.7,
         "text_based_split_percentage_dev" : 0.05,
     },
     "MHS": {
+        "strategy": "legacy",
         "user_based_split_percentage" : 0.2,
         "text_based_split_percentage" : 0.05,
     },
     "MD":{
+        "strategy": "legacy",
         "user_based_split_percentage" : 0.2,
         "text_based_split_percentage" : 0.05,  
     }
+}
+
+# Automatic split (perseval/splitting.py). A dataset can override any of these
+# values with an "auto_split" dict in its dataset_specific_splits entry.
+auto_split = {
+    "test_user_fraction": 0.2,        # fraction of the annotators used as test users
+    "adaptation_fraction": 0.05,      # fraction of the test users' texts used for adaptation
+    "target_test_share": 0.2,         # test annotations / (training with extended=False + test)
+    "min_test_annotations": 10,       # every test user is evaluated on at least this many texts
+    "min_adaptation_annotations": 1,  # every test user has at least this many adaptation texts
 }
 
 model_config = {
@@ -83,7 +100,10 @@ dataset_label ={
     "DICES":"degree-of-harm",
     "BREXIT":"hs",
     "MHS":"hateful",
-    "MD":"offensiveness"
+    "MD":"offensiveness",
+    "TAS": "hate_speech",
+    "CONVABUSE": "abuse",
+    "CSC": "sarcasm"
 }
 
 dataset_info = {
@@ -141,6 +161,36 @@ dataset_info = {
             "Education",
             "Ethnicity",
         ],
+    },
+    "TAS": {
+        "task": "Hate Speech, Offensive Language",
+        "annotators": 1807,
+        "texts": 3050,
+        "instances": 88138,
+        "source": "Twitter",
+        "label_type": "Binary",
+        "positive_class": "Hate Speech",
+        "metadata": ["Annotation condition", "Age/Generation", "Education", "Party"],
+    },
+    "CONVABUSE": {
+        "task": "Abuse towards conversational agents",
+        "annotators": 8,
+        "texts": 4185,
+        "instances": 12411,
+        "source": "Human-chatbot conversations",
+        "label_type": "Binary",
+        "positive_class": "Abusive",
+        "metadata": [],
+    },
+    "CSC": {
+        "task": "Sarcasm",
+        "annotators": 838,
+        "texts": 6972,
+        "instances": 30896,
+        "source": "Crowdsourced conversations",
+        "label_type": "Binary",
+        "positive_class": "Sarcastic",
+        "metadata": ["Gender", "Age/Generation", "Ethnicity"],
     },
 }
 
