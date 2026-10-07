@@ -1,24 +1,73 @@
-dataset,label,model,method,representation,named,adaptation,extended,global_macro_f1,annotator_macro_f1,text_macro_f1
-BREXIT,hs,Llama-3.1-8B-Instruct,Base zero,none,false,train,false,0.459,0.451,0.753
-BREXIT,hs,Llama-3.1-8B-Instruct,Perspective prompting,Group,true,train,false,0.475,0.466,0.797
-BREXIT,hs,Mixtral-8x7B-Instruct-v0.1,Base zero,none,false,train,false,0.383,0.376,0.768
-BREXIT,hs,Mixtral-8x7B-Instruct-v0.1,Perspective prompting,Group,true,train,false,0.405,0.398,0.729
-BREXIT,hs,Llama-3.1-8B-Instruct,LaMP,none,false,test,false,0.407,0.402,0.383
-BREXIT,hs,Llama-3.1-8B-Instruct,LaMP,Group,true,test,false,0.481,0.481,0.454
-BREXIT,hs,Mixtral-8x7B-Instruct-v0.1,LaMP,none,false,test,false,0.651,0.632,0.736
-BREXIT,hs,Mixtral-8x7B-Instruct-v0.1,LaMP,Group,true,test,false,0.627,0.615,0.722
-DICES,Q2_harmful_content_overall,Llama-3.1-8B-Instruct,Base zero,none,false,train,false,0.290,0.282,0.310
-DICES,Q2_harmful_content_overall,Mixtral-8x7B-Instruct-v0.1,Base zero,none,false,train,false,0.232,0.228,0.402
-DICES,Q2_harmful_content_overall,Llama-3.1-8B-Instruct,LaMP,none,false,test,false,0.355,0.340,0.425
-DICES,Q2_harmful_content_overall,Mixtral-8x7B-Instruct-v0.1,LaMP,none,false,test,false,0.306,0.356,0.443
-EPIC,irony,Llama-3.1-8B-Instruct,Base zero,none,false,train,false,0.399,0.534,0.592
-EPIC,irony,Mixtral-8x7B-Instruct-v0.1,Base zero,none,false,train,false,0.405,0.479,0.620
-EPIC,irony,Llama-3.1-8B-Instruct,LaMP,none,false,test,false,0.433,0.425,0.427
-EPIC,irony,Mixtral-8x7B-Instruct-v0.1,LaMP,none,false,test,false,0.562,0.546,0.534
-MD,offensiveness,Llama-3.1-8B-Instruct,Base zero,none,false,train,false,0.398,0.397,0.528
-MD,offensiveness,Llama-3.1-8B-Instruct,LaMP,none,false,test,false,0.604,0.545,0.581
-MD,offensiveness,Mixtral-8x7B-Instruct-v0.1,LaMP,none,false,test,false,0.447,0.582,0.708
-MHS,hateful,Llama-3.1-8B-Instruct,Base zero,none,false,train,false,0.419,0.489,0.603
-MHS,hateful,Mixtral-8x7B-Instruct-v0.1,Base zero,none,false,train,false,0.437,0.514,0.624
-MHS,hateful,Llama-3.1-8B-Instruct,LaMP,none,false,test,false,0.666,0.624,0.659
-MHS,hateful,Mixtral-8x7B-Instruct-v0.1,LaMP,none,false,test,false,0.713,0.672,0.726
+dataset,label,model_family,model,task,adaptation,extended,method,representation,global_f1,user_f1,text_f1,source
+BREXIT,hs,Encoder,FacebookAI/roberta-base,baseline,none,false,Text-only baseline,none,0.567,0.519,0.403,https://aclanthology.org/2025.emnlp-main.1137.pdf#page=7
+BREXIT,hs,Decoder,Llama-3.1-8B-Instruct,baseline,none,false,Base-zero,none,0.502,0.476,0.340,https://aclanthology.org/2025.emnlp-main.1137.pdf#page=8
+BREXIT,hs,Decoder,Mixtral-8x7B-Instruct-v0.1,baseline,none,false,Base-zero,none,0.255,0.235,0.128,https://aclanthology.org/2025.emnlp-main.1137.pdf#page=8
+BREXIT,hs,Encoder,FacebookAI/roberta-base,named,none,false,Fine-tuned encoder,Traits,0.558,0.524,0.416,https://aclanthology.org/2025.emnlp-main.1137.pdf#page=7
+BREXIT,hs,Decoder,Llama-3.1-8B-Instruct,named,none,false,Perspective prompting,Traits,0.527,0.502,0.371,https://aclanthology.org/2025.emnlp-main.1137.pdf#page=8
+BREXIT,hs,Decoder,Mixtral-8x7B-Instruct-v0.1,named,none,false,Perspective prompting,Traits,0.344,0.323,0.193,https://aclanthology.org/2025.emnlp-main.1137.pdf#page=8
+BREXIT,hs,Encoder,FacebookAI/roberta-base,named,train,false,Fine-tuned encoder,Traits,0.544,0.512,0.405,https://aclanthology.org/2025.emnlp-main.1137.pdf#page=7
+BREXIT,hs,Encoder,FacebookAI/roberta-base,unnamed,train,false,Fine-tuned encoder,User ID,0.512,0.484,0.378,https://aclanthology.org/2025.emnlp-main.1137.pdf#page=7
+BREXIT,hs,Decoder,Mixtral-8x7B-Instruct-v0.1,named,test,false,IPA (LaMP),Traits + user history,0.406,0.382,0.263,https://aclanthology.org/2025.emnlp-main.1137.pdf#page=8
+BREXIT,hs,Decoder,Llama-3.1-8B-Instruct,named,test,false,IPA (LaMP),Traits + user history,0.364,0.362,0.238,https://aclanthology.org/2025.emnlp-main.1137.pdf#page=8
+BREXIT,hs,Decoder,Mixtral-8x7B-Instruct-v0.1,unnamed,test,false,IPA (LaMP),User history,0.448,0.410,0.313,https://aclanthology.org/2025.emnlp-main.1137.pdf#page=8
+BREXIT,hs,Decoder,Llama-3.1-8B-Instruct,unnamed,test,false,IPA (LaMP),User history,0.330,0.319,0.231,https://aclanthology.org/2025.emnlp-main.1137.pdf#page=8
+BREXIT,hs,Encoder,FacebookAI/roberta-base,baseline,none,true,Text-only baseline,none,0.592,0.543,0.427,https://aclanthology.org/2025.emnlp-main.1137.pdf#page=7
+BREXIT,hs,Encoder,FacebookAI/roberta-base,named,none,true,Fine-tuned encoder,Traits,0.587,0.557,0.455,https://aclanthology.org/2025.emnlp-main.1137.pdf#page=7
+BREXIT,hs,Encoder,FacebookAI/roberta-base,named,train,true,Fine-tuned encoder,Traits,0.540,0.509,0.424,https://aclanthology.org/2025.emnlp-main.1137.pdf#page=7
+BREXIT,hs,Encoder,FacebookAI/roberta-base,unnamed,train,true,Fine-tuned encoder,User ID,0.554,0.524,0.436,https://aclanthology.org/2025.emnlp-main.1137.pdf#page=7
+DICES,Q2_harmful_content_overall,Encoder,FacebookAI/roberta-base,baseline,none,false,Text-only baseline,none,0.340,0.311,0.245,https://aclanthology.org/2025.emnlp-main.1137.pdf#page=7
+DICES,Q2_harmful_content_overall,Decoder,Llama-3.1-8B-Instruct,baseline,none,false,Base-zero,none,0.290,0.282,0.310,https://aclanthology.org/2025.emnlp-main.1137.pdf#page=8
+DICES,Q2_harmful_content_overall,Decoder,Mixtral-8x7B-Instruct-v0.1,baseline,none,false,Base-zero,none,0.232,0.228,0.402,https://aclanthology.org/2025.emnlp-main.1137.pdf#page=8
+DICES,Q2_harmful_content_overall,Encoder,FacebookAI/roberta-base,named,none,false,Fine-tuned encoder,Traits,0.400,0.391,0.361,https://aclanthology.org/2025.emnlp-main.1137.pdf#page=7
+DICES,Q2_harmful_content_overall,Decoder,Llama-3.1-8B-Instruct,named,none,false,Perspective prompting,Traits,0.298,0.290,0.289,https://aclanthology.org/2025.emnlp-main.1137.pdf#page=8
+DICES,Q2_harmful_content_overall,Decoder,Mixtral-8x7B-Instruct-v0.1,named,none,false,Perspective prompting,Traits,0.256,0.323,0.412,https://aclanthology.org/2025.emnlp-main.1137.pdf#page=8
+DICES,Q2_harmful_content_overall,Encoder,FacebookAI/roberta-base,named,train,false,Fine-tuned encoder,Traits,0.420,0.407,0.373,https://aclanthology.org/2025.emnlp-main.1137.pdf#page=7
+DICES,Q2_harmful_content_overall,Encoder,FacebookAI/roberta-base,unnamed,train,false,Fine-tuned encoder,User ID,0.434,0.424,0.389,https://aclanthology.org/2025.emnlp-main.1137.pdf#page=7
+DICES,Q2_harmful_content_overall,Decoder,Llama-3.1-8B-Instruct,named,test,false,IPA (LaMP),Traits + user history,0.365,0.354,0.428,https://aclanthology.org/2025.emnlp-main.1137.pdf#page=8
+DICES,Q2_harmful_content_overall,Decoder,Mixtral-8x7B-Instruct-v0.1,named,test,false,IPA (LaMP),Traits + user history,0.303,0.350,0.448,https://aclanthology.org/2025.emnlp-main.1137.pdf#page=8
+DICES,Q2_harmful_content_overall,Decoder,Llama-3.1-8B-Instruct,unnamed,test,false,IPA (LaMP),User history,0.355,0.340,0.425,https://aclanthology.org/2025.emnlp-main.1137.pdf#page=8
+DICES,Q2_harmful_content_overall,Decoder,Mixtral-8x7B-Instruct-v0.1,unnamed,test,false,IPA (LaMP),User history,0.306,0.356,0.443,https://aclanthology.org/2025.emnlp-main.1137.pdf#page=8
+DICES,Q2_harmful_content_overall,Encoder,FacebookAI/roberta-base,baseline,none,true,Text-only baseline,none,0.440,0.448,0.335,https://aclanthology.org/2025.emnlp-main.1137.pdf#page=7
+DICES,Q2_harmful_content_overall,Encoder,FacebookAI/roberta-base,named,none,true,Fine-tuned encoder,Traits,0.453,0.439,0.378,https://aclanthology.org/2025.emnlp-main.1137.pdf#page=7
+DICES,Q2_harmful_content_overall,Encoder,FacebookAI/roberta-base,named,train,true,Fine-tuned encoder,Traits,0.457,0.445,0.389,https://aclanthology.org/2025.emnlp-main.1137.pdf#page=7
+DICES,Q2_harmful_content_overall,Encoder,FacebookAI/roberta-base,unnamed,train,true,Fine-tuned encoder,User ID,0.456,0.446,0.388,https://aclanthology.org/2025.emnlp-main.1137.pdf#page=7
+EPIC,irony,Encoder,FacebookAI/roberta-base,baseline,none,false,Text-only baseline,none,0.555,0.538,0.376,https://aclanthology.org/2025.emnlp-main.1137.pdf#page=7
+EPIC,irony,Decoder,Llama-3.1-8B-Instruct,baseline,none,false,Base-zero,none,0.529,0.511,0.363,https://aclanthology.org/2025.emnlp-main.1137.pdf#page=8
+EPIC,irony,Decoder,Mixtral-8x7B-Instruct-v0.1,baseline,none,false,Base-zero,none,0.487,0.477,0.305,https://aclanthology.org/2025.emnlp-main.1137.pdf#page=8
+EPIC,irony,Encoder,FacebookAI/roberta-base,named,none,false,Fine-tuned encoder,Traits,0.542,0.527,0.364,https://aclanthology.org/2025.emnlp-main.1137.pdf#page=7
+EPIC,irony,Decoder,Mixtral-8x7B-Instruct-v0.1,named,none,false,Perspective prompting,Traits,0.507,0.494,0.328,https://aclanthology.org/2025.emnlp-main.1137.pdf#page=8
+EPIC,irony,Decoder,Llama-3.1-8B-Instruct,named,none,false,Perspective prompting,Traits,0.484,0.467,0.322,https://aclanthology.org/2025.emnlp-main.1137.pdf#page=8
+EPIC,irony,Encoder,FacebookAI/roberta-base,named,train,false,Fine-tuned encoder,Traits,0.550,0.534,0.371,https://aclanthology.org/2025.emnlp-main.1137.pdf#page=7
+EPIC,irony,Encoder,FacebookAI/roberta-base,unnamed,train,false,Fine-tuned encoder,User ID,0.534,0.518,0.352,https://aclanthology.org/2025.emnlp-main.1137.pdf#page=7
+EPIC,irony,Decoder,Mixtral-8x7B-Instruct-v0.1,named,test,false,IPA (LaMP),Traits + user history,0.554,0.521,0.380,https://aclanthology.org/2025.emnlp-main.1137.pdf#page=8
+EPIC,irony,Decoder,Llama-3.1-8B-Instruct,named,test,false,IPA (LaMP),Traits + user history,0.547,0.528,0.387,https://aclanthology.org/2025.emnlp-main.1137.pdf#page=8
+EPIC,irony,Decoder,Mixtral-8x7B-Instruct-v0.1,unnamed,test,false,IPA (LaMP),User history,0.553,0.528,0.384,https://aclanthology.org/2025.emnlp-main.1137.pdf#page=8
+EPIC,irony,Decoder,Llama-3.1-8B-Instruct,unnamed,test,false,IPA (LaMP),User history,0.546,0.530,0.386,https://aclanthology.org/2025.emnlp-main.1137.pdf#page=8
+EPIC,irony,Encoder,FacebookAI/roberta-base,baseline,none,true,Text-only baseline,none,0.579,0.559,0.405,https://aclanthology.org/2025.emnlp-main.1137.pdf#page=7
+EPIC,irony,Encoder,FacebookAI/roberta-base,named,none,true,Fine-tuned encoder,Traits,0.575,0.560,0.392,https://aclanthology.org/2025.emnlp-main.1137.pdf#page=7
+EPIC,irony,Encoder,FacebookAI/roberta-base,named,train,true,Fine-tuned encoder,Traits,0.578,0.564,0.594,https://aclanthology.org/2025.emnlp-main.1137.pdf#page=7
+EPIC,irony,Encoder,FacebookAI/roberta-base,unnamed,train,true,Fine-tuned encoder,User ID,0.586,0.571,0.405,https://aclanthology.org/2025.emnlp-main.1137.pdf#page=7
+MD,offensiveness,Encoder,FacebookAI/roberta-base,baseline,none,false,Text-only baseline,none,0.665,0.591,0.500,https://aclanthology.org/2025.emnlp-main.1137.pdf#page=7
+MD,offensiveness,Decoder,Llama-3.1-8B-Instruct,baseline,none,false,Base-zero,none,0.556,0.515,0.381,https://aclanthology.org/2025.emnlp-main.1137.pdf#page=8
+MD,offensiveness,Decoder,Mixtral-8x7B-Instruct-v0.1,baseline,none,false,Base-zero,none,0.538,0.495,0.678,https://aclanthology.org/2025.emnlp-main.1137.pdf#page=8
+MD,offensiveness,Encoder,FacebookAI/roberta-base,unnamed,train,false,Fine-tuned encoder,User ID,0.665,0.597,0.499,https://aclanthology.org/2025.emnlp-main.1137.pdf#page=7
+MD,offensiveness,Decoder,Llama-3.1-8B-Instruct,unnamed,test,false,IPA (LaMP),User history,0.613,0.535,0.451,https://aclanthology.org/2025.emnlp-main.1137.pdf#page=8
+MD,offensiveness,Decoder,Mixtral-8x7B-Instruct-v0.1,unnamed,test,false,IPA (LaMP),User history,0.531,0.398,0.643,https://aclanthology.org/2025.emnlp-main.1137.pdf#page=8
+MD,offensiveness,Encoder,FacebookAI/roberta-base,baseline,none,true,Text-only baseline,none,0.667,0.603,0.495,https://aclanthology.org/2025.emnlp-main.1137.pdf#page=7
+MD,offensiveness,Encoder,FacebookAI/roberta-base,unnamed,train,true,Fine-tuned encoder,User ID,0.681,0.620,0.518,https://aclanthology.org/2025.emnlp-main.1137.pdf#page=7
+MHS,hateful,Encoder,FacebookAI/roberta-base,baseline,none,false,Text-only baseline,none,0.688,0.642,0.515,https://aclanthology.org/2025.emnlp-main.1137.pdf#page=7
+MHS,hateful,Decoder,Mixtral-8x7B-Instruct-v0.1,baseline,none,false,Base-zero,none,0.648,0.599,0.483,https://aclanthology.org/2025.emnlp-main.1137.pdf#page=8
+MHS,hateful,Decoder,Llama-3.1-8B-Instruct,baseline,none,false,Base-zero,none,0.593,0.543,0.425,https://aclanthology.org/2025.emnlp-main.1137.pdf#page=8
+MHS,hateful,Encoder,FacebookAI/roberta-base,named,none,false,Fine-tuned encoder,Traits,0.691,0.640,0.518,https://aclanthology.org/2025.emnlp-main.1137.pdf#page=7
+MHS,hateful,Decoder,Mixtral-8x7B-Instruct-v0.1,named,none,false,Perspective prompting,Traits,0.644,0.594,0.480,https://aclanthology.org/2025.emnlp-main.1137.pdf#page=8
+MHS,hateful,Decoder,Llama-3.1-8B-Instruct,named,none,false,Perspective prompting,Traits,0.515,0.454,0.354,https://aclanthology.org/2025.emnlp-main.1137.pdf#page=8
+MHS,hateful,Encoder,FacebookAI/roberta-base,named,train,false,Fine-tuned encoder,Traits,0.689,0.641,0.516,https://aclanthology.org/2025.emnlp-main.1137.pdf#page=7
+MHS,hateful,Encoder,FacebookAI/roberta-base,unnamed,train,false,Fine-tuned encoder,User ID,0.692,0.643,0.521,https://aclanthology.org/2025.emnlp-main.1137.pdf#page=7
+MHS,hateful,Decoder,Llama-3.1-8B-Instruct,named,test,false,IPA (LaMP),Traits + user history,0.637,0.573,0.467,https://aclanthology.org/2025.emnlp-main.1137.pdf#page=8
+MHS,hateful,Decoder,Mixtral-8x7B-Instruct-v0.1,named,test,false,IPA (LaMP),Traits + user history,0.634,0.569,0.459,https://aclanthology.org/2025.emnlp-main.1137.pdf#page=8
+MHS,hateful,Decoder,Mixtral-8x7B-Instruct-v0.1,unnamed,test,false,IPA (LaMP),User history,0.632,0.571,0.457,https://aclanthology.org/2025.emnlp-main.1137.pdf#page=8
+MHS,hateful,Decoder,Llama-3.1-8B-Instruct,unnamed,test,false,IPA (LaMP),User history,0.626,0.570,0.456,https://aclanthology.org/2025.emnlp-main.1137.pdf#page=8
+MHS,hateful,Encoder,FacebookAI/roberta-base,baseline,none,true,Text-only baseline,none,0.696,0.647,0.526,https://aclanthology.org/2025.emnlp-main.1137.pdf#page=7
+MHS,hateful,Encoder,FacebookAI/roberta-base,named,none,true,Fine-tuned encoder,Traits,0.700,0.651,0.530,https://aclanthology.org/2025.emnlp-main.1137.pdf#page=7
+MHS,hateful,Encoder,FacebookAI/roberta-base,named,train,true,Fine-tuned encoder,Traits,0.700,0.650,0.532,https://aclanthology.org/2025.emnlp-main.1137.pdf#page=7
+MHS,hateful,Encoder,FacebookAI/roberta-base,unnamed,train,true,Fine-tuned encoder,User ID,0.697,0.648,0.527,https://aclanthology.org/2025.emnlp-main.1137.pdf#page=7
