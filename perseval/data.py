@@ -42,25 +42,10 @@ class PerspectivistDataset:
         return list(self.labels.keys())
 
     def describe(self, verbose=False):
-        """Return statistics and metadata about this dataset.
+        """Return statistics and metadata about this dataset."""
 
-        Parameters
-        ----------
-        verbose : bool
-            If True, print a human-readable summary.
-
-        Returns
-        -------
-        dict
-            Dataset description and statistics.
-        """
-
-        users = set()
-        texts = set()
-
-        for row in self.dataset:
-            users.add(row[self.key_user])
-            texts.add(row[self.key_text])
+        users = set(self.dataset[self.key_user])
+        texts = set(self.dataset[self.key_text])
 
         instances = len(self.dataset)
         annotators = len(users)
@@ -68,7 +53,6 @@ class PerspectivistDataset:
 
         description = {
             "name": self.name,
-            "task": config.dataset_info[self.name]["task"],
             "annotators": annotators,
             "texts": n_texts,
             "instances": instances,
@@ -78,10 +62,6 @@ class PerspectivistDataset:
             "annotations_per_annotator": (
                 instances / annotators if annotators else 0
             ),
-            "source": config.dataset_info[self.name]["source"],
-            "label_type": config.dataset_info[self.name]["label_type"],
-            "positive_class": config.dataset_info[self.name]["positive_class"],
-            "metadata": config.dataset_info[self.name]["metadata"],
             "labels": self.available_labels(),
             "default_label": self.label,
         }
@@ -90,24 +70,9 @@ class PerspectivistDataset:
             print(f"\n{description['name']}")
             print("-" * len(description["name"]))
 
-            print(f"Task:                  {description['task']}")
-            print(f"Annotators:            {description['annotators']}")
-            print(f"Texts:                 {description['texts']}")
-            print(f"Instances:             {description['instances']}")
-            print(
-                f"Annotations/text:      "
-                f"{description['annotations_per_text']:.2f}"
-            )
-            print(
-                f"Annotations/annotator: "
-                f"{description['annotations_per_annotator']:.2f}"
-            )
-            print(f"Source:                {description['source']}")
-            print(f"Label type:            {description['label_type']}")
-            print(f"Positive class:        {description['positive_class']}")
-            print(f"Labels:                {description['labels']}")
-            print(f"Default label:         {description['default_label']}")
-            print(f"Metadata:              {description['metadata']}")
+            for key, value in description.items():
+                if key != "name":
+                    print(f"{key}: {value}")
 
         return description
 
@@ -280,15 +245,15 @@ class User:
 
 @dataclass
 class Epic(PerspectivistDataset):
-    def __init__(self, label):
+    def __init__(self, label=None):
         super(Epic, self).__init__()
         self.name = "EPIC"
-        self.label = label
+        self.label = label or config.dataset_label[self.name]
         dataset = load_dataset("Multilingual-Perspectivist-NLU/EPIC")
         self.dataset = dataset["train"]
         self.dataset = self.dataset.map(lambda x: {"label": config.label_map[label][x["label"]]})
         self.label = config.dataset_label[self.name]
-        self.labels[label] = set()
+        self.labels[self.label] = set()
         self.key_user = 'user'
         self.key_text = 'id_original'
 
@@ -445,13 +410,13 @@ class Epic(PerspectivistDataset):
 
 @dataclass
 class Brexit(PerspectivistDataset):
-    def __init__(self):
+    def __init__(self, label=None):
         super(Brexit, self).__init__()
         self.name = "BREXIT"
         dataset = load_dataset("silvia-casola/BREXIT")
         self.dataset = concatenate_datasets([dataset["train"], dataset["validation"], dataset["test"]])
         labels = ["hs", "offensiveness", "aggressiveness", "stereotype"]
-        self.label = config.dataset_label[self.name]
+        self.label = label or config.dataset_label[self.name]
         for label in labels:
             self.labels[label] = set()
         self.key_user = 'annotator_id'
@@ -586,13 +551,13 @@ class Brexit(PerspectivistDataset):
         
 @dataclass
 class DICES(PerspectivistDataset):
-    def __init__(self, label):
+    def __init__(self, label=None):
         super(DICES, self).__init__()
         self.name = "DICES"
-        self.label = label
+        self.label = label or config.dataset_label[self.name]
         self.dataset = load_from_disk("data/diverse_safety_adversarial_dialog_350_enhanced")
         self.dataset = self.dataset.map(lambda x: {label: config.label_map[label][x[label]]})
-        self.labels[label] = set()
+        self.labels[self.label] = set()
         self.key_user = 'rater_id'
         self.key_text = 'text_id'
 
@@ -736,14 +701,14 @@ class DICES(PerspectivistDataset):
 
 @dataclass
 class MHS(PerspectivistDataset):
-    def __init__(self, label):
+    def __init__(self, label=None):
         super(MHS, self).__init__()
         self.name = "MHS"
-        self.label = label
+        self.label = label or config.dataset_label[self.name]
         dataset = load_dataset("ucberkeley-dlab/measuring-hate-speech")
         self.dataset = dataset["train"]
         self.dataset = self.dataset.map(lambda x: {"hateful": 1 if x["hatespeech"] > 0 else 0})
-        self.labels[label] = set()
+        self.labels[self.label] = set()
         self.key_user = 'annotator_id'
         self.key_text = 'comment_id'
 
@@ -930,13 +895,13 @@ class MHS(PerspectivistDataset):
 
 @dataclass
 class MD(PerspectivistDataset):
-    def __init__(self, label):
+    def __init__(self, label=None):
         super(MD, self).__init__()
         self.name = "MD"
-        self.label = label
+        self.label = label or config.dataset_label[self.name]
         dataset = load_dataset("csv", data_files="data/MD-Agreement_dataset/MD_agreement.csv")
         self.dataset = dataset["train"]
-        self.labels[label] = set()
+        self.labels[self.label] = set()
         self.key_user = 'annotators'
         self.key_text = 'text_id'
 
@@ -1058,49 +1023,18 @@ class MD(PerspectivistDataset):
         self.describe_splits()        
         
 _DATASETS = {
-    "epic": lambda: Epic(config.dataset_label["EPIC"]),
+    "epic": Epic,
     "brexit": Brexit,
-    "dices": lambda: DICES(config.dataset_label["DICES"]),
-    "mhs": lambda: MHS(config.dataset_label["MHS"]),
-    "md": lambda: MD(config.dataset_label["MD"]),
+    "dices": DICES,
+    "mhs": MHS,
+    "md": MD,
 }
 
-def available_datasets(verbose=False):
-    """Return information about the available datasets.
+def available_datasets():
+    """Return the names of all available datasets."""
+    return list(_DATASETS.keys())
 
-    Parameters
-    ----------
-    verbose : bool
-        If True, print the dataset information in a readable format.
-
-    Returns
-    -------
-    dict
-        Information about the available datasets.
-    """
-
-    datasets = {}
-
-    for name, info in config.dataset_info.items():
-        datasets[name] = {
-            "name": name,
-            **info,
-            "default_label": config.dataset_label[name],
-        }
-
-    if verbose:
-        for name, info in datasets.items():
-            print(f"\n{'=' * 60}")
-            print(f"Dataset: {name}")
-            print(f"{'=' * 60}")
-
-            for key, value in info.items():
-                if key != "name":
-                    print(f"{key}: {value}")
-
-    return datasets
-
-def download(dataset_name):
+def download(dataset_name, label=None):
     """
     Download and initialize a dataset.
 
@@ -1108,6 +1042,9 @@ def download(dataset_name):
     ----------
     dataset_name : str
         Dataset name. Case-insensitive.
+
+    label : str, optional
+        Label to use. If omitted, the dataset's default label is used.
 
     Returns
     -------
@@ -1126,9 +1063,16 @@ def download(dataset_name):
             f"Available datasets: {available}"
         )
 
-    return _DATASETS[dataset_name]()    
+    return _DATASETS[dataset_name](label)    
 
-def download_and_split(dataset_name, user_adaptation=False, extended=False, named=False, baseline=False,):
+def download_and_split(
+    dataset_name,
+    label=None,
+    user_adaptation=False,
+    extended=False,
+    named=False,
+    baseline=False,
+):
     """
     Download a dataset and generate its requested task split.
 
@@ -1136,6 +1080,9 @@ def download_and_split(dataset_name, user_adaptation=False, extended=False, name
     ----------
     dataset_name : str
         Dataset name. Case-insensitive.
+
+    label : str, optional
+        Label to use. If omitted, the dataset's default label is used.
 
     user_adaptation : bool or str
         False, "train", or "test".
@@ -1154,8 +1101,8 @@ def download_and_split(dataset_name, user_adaptation=False, extended=False, name
     PerspectivistDataset
         Dataset with training, adaptation and test splits.
     """
-    
-    dataset = download(dataset_name)
+
+    dataset = download(dataset_name, label=label)
 
     dataset.get_splits(
         extended=extended,
@@ -1171,7 +1118,7 @@ def describe_datasets(verbose=False):
 
     descriptions = {}
 
-    for name in config.dataset_info:
+    for name in _DATASETS:
         dataset = download(name)
         descriptions[name] = dataset.describe(verbose=verbose)
 
