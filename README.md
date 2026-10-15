@@ -109,6 +109,11 @@ We require models to output a **label** for each **<user, text> tuple**. Startin
 - text-level: computed individually for each text in the test set and then averaged; 
 - trait-level: computed for each trait and then averaged for each dimension.
 
+## 🏆 Leaderboard
+
+- [View the leaderboard](./leaderboard/README.md)
+- [Download the results as CSV](./leaderboard/scores.csv)
+
 
 ## 🤖 Baseline Models 
 ### Encoder-based 
