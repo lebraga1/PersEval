@@ -1,0 +1,179 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta
+      name="description"
+      content="Interactive PersEval leaderboard for encoder- and decoder-based perspectivist classification models."
+    >
+    <title>PersEval Leaderboard</title>
+    <link rel="stylesheet" href="./styles.css">
+    <script src="./app.js" defer></script>
+  </head>
+  <body>
+    <div class="page-glow page-glow--violet" aria-hidden="true"></div>
+    <div class="page-glow page-glow--green" aria-hidden="true"></div>
+
+    <main class="shell">
+      <nav class="topbar" aria-label="Leaderboard navigation">
+        <a class="brand" href="https://github.com/valeriobasile/PersEval">
+          <span class="brand-mark" aria-hidden="true">P</span>
+          <span>PersEval</span>
+        </a>
+        <span class="verified-pill"><span aria-hidden="true"></span> Published benchmark</span>
+      </nav>
+
+      <header class="hero">
+        <div class="hero-copy">
+          <p class="eyebrow">Perspective-aware classification</p>
+          <h1>One benchmark.<br><span>Every perspective.</span></h1>
+          <p class="hero-description">
+            Compare encoder- and decoder-based models across every published PersEval
+            task variant. Filter the evidence, sort the metrics, and inspect each result.
+          </p>
+        </div>
+
+        <div class="hero-stat" aria-label="Published configuration count">
+          <span class="hero-stat__value" id="total-configurations">72</span>
+          <span class="hero-stat__label">published<br>configurations</span>
+        </div>
+      </header>
+
+      <section class="leaderboard" aria-labelledby="leaderboard-title">
+        <div class="leaderboard-heading">
+          <div>
+            <p class="section-kicker">Benchmark results</p>
+            <h2 id="leaderboard-title">Interactive leaderboard</h2>
+          </div>
+          <a class="download-button" href="./scores.csv" download>
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M12 3v12m0 0 5-5m-5 5-5-5M5 21h14"></path>
+            </svg>
+            Download CSV
+          </a>
+        </div>
+
+        <div class="filters" aria-label="Leaderboard filters">
+          <label class="filter-control">
+            <span>Dataset</span>
+            <select id="dataset-filter">
+              <option value="">All datasets</option>
+            </select>
+          </label>
+
+          <label class="filter-control">
+            <span>Model type</span>
+            <select id="family-filter">
+              <option value="">All model types</option>
+            </select>
+          </label>
+
+          <label class="filter-control filter-control--model">
+            <span>Model</span>
+            <select id="model-filter">
+              <option value="">All models</option>
+            </select>
+          </label>
+
+          <button class="reset-button" id="reset-filters" type="button">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M4 4v6h6M20 20v-6h-6M5.1 15a8 8 0 0 0 13.2 2M18.9 9A8 8 0 0 0 5.7 7"></path>
+            </svg>
+            Reset
+          </button>
+        </div>
+
+        <div class="results-bar">
+          <p id="results-summary" aria-live="polite">Loading results…</p>
+          <div class="score-legend" aria-label="Score heat map legend">
+            <span>Lower</span>
+            <span class="score-legend__gradient" aria-hidden="true"></span>
+            <span>Higher</span>
+          </div>
+        </div>
+
+        <div class="table-frame">
+          <div class="table-scroll">
+            <table id="leaderboard-table">
+              <caption class="sr-only">
+                PersEval results. Use the metric column buttons to sort and the controls
+                above the table to filter by dataset, model type, or model.
+              </caption>
+              <thead>
+                <tr class="column-groups">
+                  <th rowspan="2" scope="col">
+                    <button class="sort-button" data-sort="rank" type="button">
+                      Rank <span class="sort-indicator" aria-hidden="true"></span>
+                    </button>
+                  </th>
+                  <th colspan="4" scope="colgroup">Identity</th>
+                  <th colspan="5" scope="colgroup">Configuration</th>
+                  <th colspan="3" scope="colgroup">Performance</th>
+                  <th rowspan="2" scope="col">Evidence</th>
+                </tr>
+                <tr class="column-labels">
+                  <th scope="col">Dataset</th>
+                  <th scope="col">Label</th>
+                  <th scope="col">Type</th>
+                  <th scope="col">Model</th>
+                  <th scope="col">Task</th>
+                  <th scope="col">Adaptation</th>
+                  <th scope="col">Extended</th>
+                  <th scope="col">Method</th>
+                  <th scope="col">Representation</th>
+                  <th scope="col">
+                    <button class="sort-button" data-sort="global_f1" type="button">
+                      Global F1 <span class="sort-indicator" aria-hidden="true"></span>
+                    </button>
+                  </th>
+                  <th scope="col">
+                    <button class="sort-button" data-sort="user_f1" type="button">
+                      User F1 <span class="sort-indicator" aria-hidden="true"></span>
+                    </button>
+                  </th>
+                  <th scope="col">
+                    <button class="sort-button" data-sort="text_f1" type="button">
+                      Text F1 <span class="sort-indicator" aria-hidden="true"></span>
+                    </button>
+                  </th>
+                </tr>
+              </thead>
+              <tbody id="leaderboard-body"></tbody>
+            </table>
+
+            <div class="empty-state" id="empty-state" hidden>
+              <div aria-hidden="true">⌁</div>
+              <h3>No matching configurations</h3>
+              <p>Try broadening one of the filters above.</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="table-note">
+          <p>
+            Binary datasets report positive-class F1. DICES reports macro-F1.
+            Variant rank compares only identical dataset, task, adaptation, and
+            extended-training settings.
+          </p>
+          <a href="https://aclanthology.org/2025.emnlp-main.1137/">
+            Read the PersEval paper
+            <span aria-hidden="true">↗</span>
+          </a>
+        </div>
+      </section>
+
+      <footer>
+        <span>PersEval · EMNLP 2025</span>
+        <span>72 results · 5 datasets · 3 models</span>
+      </footer>
+    </main>
+
+    <noscript>
+      <p class="noscript-message">
+        JavaScript is required for leaderboard filtering and sorting. The complete data
+        remains available in <a href="./scores.csv">scores.csv</a>.
+      </p>
+    </noscript>
+  </body>
+</html>
