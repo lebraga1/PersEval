@@ -3,7 +3,7 @@ import numpy as np
 from sklearn.metrics import classification_report
 
 class Evaluator():
-    def __init__(self, prediction_table, test_set, label):
+    def __init__(self, prediction_table, test_set, label, verbose=True):
         self.test_set = test_set
         if isinstance(prediction_table, pd.DataFrame):
             self.predictions = prediction_table
@@ -35,7 +35,8 @@ class Evaluator():
             nan_rows = self.ordered_pred.loc[self.ordered_pred["predictions"].isnull(), ["user_id", "text_id"]]
             nan_users = nan_rows["user_id"].unique()
             
-            print(f"User {list(nan_users)} did not provide target demographic information.")
+            if verbose:
+                print(f"User {list(nan_users)} did not provide target demographic information.")
             self.ordered_pred = self.ordered_pred.fillna(-1)
 
 
@@ -67,19 +68,22 @@ class Evaluator():
         
             
         
-    def global_metrics(self):
-        print("\n----- Global metrics -----")
+    def global_metrics(self, verbose=True):
+        if verbose:
+            print("\n----- Global metrics -----")
         self.global_metrics_dic = classification_report(
             self.ordered_pred["gold"], 
             self.ordered_pred["predictions"], 
             zero_division=0.0,
             output_dict=True)
-        self.print_metrics(self.global_metrics_dic)
+        if verbose:
+            self.print_metrics(self.global_metrics_dic)
         return self.global_metrics_dic
 
 
-    def annotator_level_metrics(self):
-        print("\n----- Annotator-level metrics -----")
+    def annotator_level_metrics(self, verbose=True):
+        if verbose:
+            print("\n----- Annotator-level metrics -----")
         self.annotator_level_metrics_dic = {}
         all_annotator_level_metrics = {}
         for annotator in list(set(self.ordered_pred["user_id"])):
@@ -105,8 +109,9 @@ class Evaluator():
                     else:
                         all_annotator_level_metrics[label].append(self.annotator_level_metrics_dic[annotator][label])
 
-        print("\nAnnotator-level macro average")
-        self.annotator_based_macro_avg = {}        
+        if verbose:
+            print("\nAnnotator-level macro average")
+        self.annotator_based_macro_avg = {}
         for label in all_annotator_level_metrics:
             if not isinstance(all_annotator_level_metrics[label], list):
                 if not label in self.annotator_based_macro_avg:
@@ -118,12 +123,14 @@ class Evaluator():
             else:    
                 self.annotator_based_macro_avg[label] = np.mean(all_annotator_level_metrics[label])
                 # print("%s --- %.3f" % (label, self.annotator_based_macro_avg[label]))
-        self.print_metrics(self.annotator_based_macro_avg)
+        if verbose:
+            self.print_metrics(self.annotator_based_macro_avg)
         return self.annotator_based_macro_avg
         
 
-    def text_level_metrics(self):
-        print("\n----- Text-level metrics -----")
+    def text_level_metrics(self, verbose=True):
+        if verbose:
+            print("\n----- Text-level metrics -----")
         self.text_level_metrics_dic = {}
         all_text_level_metrics = {}
         for text in list(set(self.ordered_pred["text_id"])):
@@ -149,8 +156,9 @@ class Evaluator():
                     else:
                         all_text_level_metrics[label].append(self.text_level_metrics_dic[text][label])
         
-        print("\nText-level macro average")
-        self.text_based_macro_avg = {}        
+        if verbose:
+            print("\nText-level macro average")
+        self.text_based_macro_avg = {}
         for label in all_text_level_metrics:
             if not isinstance(all_text_level_metrics[label], list):
                 if not label in self.text_based_macro_avg:
@@ -161,11 +169,13 @@ class Evaluator():
             else:
                 self.text_based_macro_avg[label] = np.mean(all_text_level_metrics[label])
                 # print("%s --- %.3f" % (label, np.mean(all_text_level_metrics[label])))
-        self.print_metrics(self.text_based_macro_avg)
+        if verbose:
+            self.print_metrics(self.text_based_macro_avg)
         return self.text_based_macro_avg
     
-    def trait_level_metrics(self):
-        print("\n----- Trait-level metrics -----")        
+    def trait_level_metrics(self, verbose=True):
+        if verbose:
+            print("\n----- Trait-level metrics -----")
         self.trait_level_metrics_dic = {}
         all_trait_level_metrics = {}
 
@@ -217,12 +227,15 @@ class Evaluator():
         self.trait_based_macro_avg = {}
 
         if not trait_to_annotator:
-            print("\nNo trait-level metrics: the test set has no annotator traits "
-                  "(the task was generated with named=False, or the dataset has no annotator metadata).")
+            if verbose:
+                print("\nNo trait-level metrics: the test set has no annotator traits "
+                      "(the task was generated with named=False, or the dataset has no annotator metadata).")
         else:
-            print("\nTrait-level macro averages")
+            if verbose:
+                print("\nTrait-level macro averages")
             for dim in all_trait_level_metrics:
-                print("\n--- %s ---" % dim)
+                if verbose:
+                    print("\n--- %s ---" % dim)
                 if not dim in self.trait_based_macro_avg:
                     self.trait_based_macro_avg[dim] = {}
                 for label in all_trait_level_metrics[dim]:
@@ -235,8 +248,44 @@ class Evaluator():
                     else:
                         self.trait_based_macro_avg[dim][label] = np.mean(all_trait_level_metrics[dim][label])
                         # print("%s --- %.3f" % (label, np.mean(all_trait_level_metrics[dim][label])))
-                self.print_metrics(self.trait_based_macro_avg[dim])
+                if verbose:
+                    self.print_metrics(self.trait_based_macro_avg[dim])
 
         return self.trait_based_macro_avg
+
+    def all_metrics(self, verbose=False, flat=False):
+        """Compute the four evaluation levels at once, e.g. for batch experiments.
+
+        Returns {"global": ..., "annotator": ..., "text": ..., "trait": ...}.
+        With flat=True the result is a single-level dict with keys such as
+        "annotator/macro avg/f1-score" or "trait/Gender/macro avg/f1-score",
+        so one run is one row of a DataFrame: pd.DataFrame([run1, run2, ...]).
+        Silent by default; pass verbose=True to also print the usual tables.
+        """
+        results = {
+            "global": self.global_metrics(verbose=verbose),
+            "annotator": self.annotator_level_metrics(verbose=verbose),
+            "text": self.text_level_metrics(verbose=verbose),
+            "trait": self.trait_level_metrics(verbose=verbose),
+        }
+        if flat:
+            return flatten_metrics(results)
+        else:
+            return results
+
+
+def flatten_metrics(d, prefix=""):
+    """Flatten nested metric dicts into {"a/b/c": value}."""
+    flat = {}
+    for k, v in d.items():
+        key = f"{prefix}/{k}" if prefix else str(k)
+        if isinstance(v, dict):
+            flat.update(flatten_metrics(v, key))
+        else:
+            flat[key] = v
+    return flat
+
+
+
 
                     
