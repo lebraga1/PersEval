@@ -1,37 +1,68 @@
 "use strict";
 
 const DATA_SOURCES = ["./scores.csv", "../../leaderboard/scores.csv"];
-const NUMERIC_FIELDS = new Set(["rank", "global_f1", "user_f1", "text_f1"]);
+const METRIC_FIELDS = ["global_f1", "user_f1", "text_f1"];
+const NUMERIC_FIELDS = new Set(["rank", ...METRIC_FIELDS]);
+const DATASET_ORDER = ["BREXIT", "DICES", "EPIC", "MD", "MHS"];
+const VARIANT_ORDER = [
+  "baseline::none",
+  "named::none",
+  "named::train",
+  "unnamed::train",
+  "named::test",
+  "unnamed::test",
+];
+const TASK_LABELS = {
+  baseline: "Baseline",
+  named: "Named perspective",
+  unnamed: "Unnamed perspective",
+};
 const ADAPTATION_LABELS = {
-  none: "None",
-  train: "Training time",
-  test: "Inference time",
+  none: "No adaptation",
+  train: "Training-time adaptation",
+  test: "Inference-time adaptation",
 };
 
 const state = {
   rows: [],
+  groups: [],
+  groupByKey: new Map(),
+  visibleRows: [],
+  view: "grouped",
   filters: {
     dataset: "",
-    family: "",
+    extended: "all",
+    adaptation: "all",
+    families: new Set(["Encoder", "Decoder"]),
     model: "",
+    query: "",
   },
   sort: {
-    key: "global_f1",
-    direction: "desc",
+    key: "rank",
+    direction: "asc",
   },
 };
 
 const elements = {
   body: document.querySelector("#leaderboard-body"),
+  table: document.querySelector("#leaderboard-table"),
+  togetherBody: document.querySelector("#together-leaderboard-body"),
+  togetherTable: document.querySelector("#together-leaderboard-table"),
   datasetFilter: document.querySelector("#dataset-filter"),
-  familyFilter: document.querySelector("#family-filter"),
+  extendedButtons: [...document.querySelectorAll("#extended-filter button")],
+  adaptationButtons: [...document.querySelectorAll("#adaptation-filter button")],
+  viewButtons: [...document.querySelectorAll("#view-mode button")],
+  familyInputs: [...document.querySelectorAll(".family-choice input")],
   modelFilter: document.querySelector("#model-filter"),
+  searchFilter: document.querySelector("#search-filter"),
   resetButton: document.querySelector("#reset-filters"),
+  copyButton: document.querySelector("#copy-results"),
   resultsSummary: document.querySelector("#results-summary"),
   totalConfigurations: document.querySelector("#total-configurations"),
+  footerSummary: document.querySelector("#footer-summary"),
   emptyState: document.querySelector("#empty-state"),
-  table: document.querySelector("#leaderboard-table"),
   sortButtons: [...document.querySelectorAll(".sort-button")],
+  toast: document.querySelector("#toast"),
 };
 
 function parseCsv(csvText) {
@@ -73,8 +104,12 @@ function parseCsv(csvText) {
   }
 
   const [headers, ...values] = records;
+  if (!headers) {
+    throw new Error("scores.csv is empty");
+  }
+
   return values.map((row) =>
-    Object.fromEntries(headers.map((header, index) => [header, row[index] ?? ""])),
+    Object.fromEntries(headers.map((header, index) => [header.trim(), (row[index] ?? "").trim()])),
   );
 }
 
@@ -83,7 +118,7 @@ async function loadRows() {
 
   for (const source of DATA_SOURCES) {
     try {
-      const response = await fetch(source);
+      const response = await fetch(source, { cache: "no-cache" });
       if (!response.ok) {
         throw new Error(`${response.status} ${response.statusText}`);
       }
@@ -96,8 +131,27 @@ async function loadRows() {
   throw new Error(`Unable to load scores.csv (${failures.join("; ")})`);
 }
 
+function datasetPosition(dataset) {
+  const position = DATASET_ORDER.indexOf(dataset);
+  return position === -1 ? DATASET_ORDER.length : position;
+}
+
+function variantPosition(task, adaptation) {
+  const position = VARIANT_ORDER.indexOf(`${task}::${adaptation}`);
+  return position === -1 ? VARIANT_ORDER.length : position;
+}
+
+function compareGroups(left, right) {
+  return (
+    datasetPosition(left.dataset) - datasetPosition(right.dataset) ||
+    left.label.localeCompare(right.label) ||
+    Number(left.extended === "true") - Number(right.extended === "true") ||
+    variantPosition(left.task, left.adaptation) - variantPosition(right.task, right.adaptation)
+  );
+}
+
 function enrichRows(rows) {
-  const enriched = rows.map((row, sourceIndex) => ({
+  const enrichedRows = rows.map((row, sourceIndex) => ({
     ...row,
     sourceIndex,
     global_f1: Number(row.global_f1),
@@ -105,29 +159,48 @@ function enrichRows(rows) {
     text_f1: Number(row.text_f1),
   }));
 
-  const variants = new Map();
-  enriched.forEach((row) => {
-    const variantKey = [
-      row.dataset,
-      row.label,
-      row.task,
-      row.adaptation,
-      row.extended,
-    ].join("::");
-    const group = variants.get(variantKey) ?? [];
-    group.push(row);
-    variants.set(variantKey, group);
-  });
-
-  variants.forEach((variantRows) => {
-    variantRows
-      .sort((left, right) => right.global_f1 - left.global_f1 || left.model.localeCompare(right.model))
-      .forEach((row, index) => {
-        row.rank = index + 1;
+  const groupMap = new Map();
+  enrichedRows.forEach((row) => {
+    const key = [row.dataset, row.label, row.task, row.adaptation, row.extended].join("::");
+    if (!groupMap.has(key)) {
+      groupMap.set(key, {
+        key,
+        dataset: row.dataset,
+        label: row.label,
+        task: row.task,
+        adaptation: row.adaptation,
+        extended: row.extended,
+        rows: [],
+        ranges: {},
       });
+    }
+    groupMap.get(key).rows.push(row);
   });
 
-  return enriched;
+  const groups = [...groupMap.values()].sort(compareGroups);
+  groups.forEach((group) => {
+    group.rows.sort(
+      (left, right) =>
+        right.global_f1 - left.global_f1 ||
+        left.model.localeCompare(right.model) ||
+        left.sourceIndex - right.sourceIndex,
+    );
+
+    group.rows.forEach((row) => {
+      row.rank = 1 + group.rows.filter((candidate) => candidate.global_f1 > row.global_f1).length;
+      row.groupKey = group.key;
+    });
+
+    METRIC_FIELDS.forEach((field) => {
+      const values = group.rows.map((row) => row[field]);
+      group.ranges[field] = {
+        min: Math.min(...values),
+        max: Math.max(...values),
+      };
+    });
+  });
+
+  return { rows: enrichedRows, groups };
 }
 
 function uniqueValues(field) {
@@ -147,45 +220,44 @@ function populateSelect(select, values) {
   select.append(fragment);
 }
 
-function filteredRows() {
-  return state.rows.filter((row) => {
-    const datasetMatches = !state.filters.dataset || row.dataset === state.filters.dataset;
-    const familyMatches = !state.filters.family || row.model_family === state.filters.family;
-    const modelMatches = !state.filters.model || row.model === state.filters.model;
-    return datasetMatches && familyMatches && modelMatches;
-  });
+function groupMatchesFilters(group) {
+  const datasetMatches = !state.filters.dataset || group.dataset === state.filters.dataset;
+  const extendedMatches =
+    state.filters.extended === "all" || group.extended === state.filters.extended;
+  const adaptationMatches =
+    state.filters.adaptation === "all" || group.adaptation === state.filters.adaptation;
+  return datasetMatches && extendedMatches && adaptationMatches;
+}
+
+function rowMatchesFilters(row) {
+  const familyMatches = state.filters.families.has(row.model_family);
+  const modelMatches = !state.filters.model || row.model === state.filters.model;
+  const haystack = `${row.model} ${row.method} ${row.representation}`.toLowerCase();
+  const queryMatches = !state.filters.query || haystack.includes(state.filters.query);
+  return familyMatches && modelMatches && queryMatches;
 }
 
 function sortedRows(rows) {
-  const direction = state.sort.direction === "asc" ? 1 : -1;
-  const key = state.sort.key;
+  const { key, direction } = state.sort;
+  const multiplier = direction === "asc" ? 1 : -1;
 
   return [...rows].sort((left, right) => {
-    let comparison;
-    if (NUMERIC_FIELDS.has(key)) {
-      comparison = left[key] - right[key];
-    } else {
-      comparison = String(left[key]).localeCompare(String(right[key]));
-    }
-
-    return comparison * direction || left.sourceIndex - right.sourceIndex;
+    const comparison = NUMERIC_FIELDS.has(key)
+      ? left[key] - right[key]
+      : String(left[key]).localeCompare(String(right[key]));
+    return comparison * multiplier || left.model.localeCompare(right.model) || left.sourceIndex - right.sourceIndex;
   });
 }
 
-function escapeHtml(value) {
-  return String(value)
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#039;");
-}
-
-function metricStyle(score) {
-  const clampedScore = Math.max(0, Math.min(1, score));
-  const hue = 31 + clampedScore * 112;
-  const lightness = 23 + clampedScore * 4;
-  return `background: hsl(${hue.toFixed(1)} 48% ${lightness.toFixed(1)}%)`;
+function createElement(tag, className, text) {
+  const element = document.createElement(tag);
+  if (className) {
+    element.className = className;
+  }
+  if (text !== undefined) {
+    element.textContent = text;
+  }
+  return element;
 }
 
 function sourceTable(row) {
@@ -195,91 +267,372 @@ function sourceTable(row) {
   return row.dataset === "DICES" ? 6 : 5;
 }
 
-function rowTemplate(row) {
-  const familyClass = row.model_family.toLowerCase();
-  const representation = row.representation === "none" ? "—" : row.representation;
-  const extended = row.extended === "true";
-  const rankClass = row.rank === 1 ? " rank-badge--first" : "";
+function variantHeader(group, visibleCount) {
+  const row = createElement("tr", "variant-row");
+  const cell = createElement("th");
+  cell.colSpan = 9;
+  cell.scope = "rowgroup";
 
-  return `
-    <tr>
-      <td class="rank-cell">
-        <span class="rank-badge${rankClass}" title="Rank within this exact task variant">${row.rank}</span>
-      </td>
-      <td class="dataset-cell">${escapeHtml(row.dataset)}</td>
-      <td class="label-cell">${escapeHtml(row.label)}</td>
-      <td><span class="family-pill family-pill--${familyClass}">${escapeHtml(row.model_family)}</span></td>
-      <td class="model-cell">${escapeHtml(row.model)}</td>
-      <td class="task-cell">${escapeHtml(row.task[0].toUpperCase() + row.task.slice(1))}</td>
-      <td class="adaptation-cell">${escapeHtml(ADAPTATION_LABELS[row.adaptation])}</td>
-      <td><span class="boolean-pill${extended ? " boolean-pill--yes" : ""}">${extended ? "Yes" : "No"}</span></td>
-      <td class="method-cell">${escapeHtml(row.method)}</td>
-      <td class="representation-cell">${escapeHtml(representation)}</td>
-      <td class="metric-cell" style="${metricStyle(row.global_f1)}">${row.global_f1.toFixed(3)}</td>
-      <td class="metric-cell" style="${metricStyle(row.user_f1)}">${row.user_f1.toFixed(3)}</td>
-      <td class="metric-cell" style="${metricStyle(row.text_f1)}">${row.text_f1.toFixed(3)}</td>
-      <td>
-        <a class="source-link" href="${escapeHtml(row.source)}" target="_blank" rel="noreferrer">
-          Table ${sourceTable(row)} <span aria-hidden="true">↗</span>
-        </a>
-      </td>
-    </tr>
-  `;
+  const identity = createElement("div", "variant-identity");
+  const dataset = createElement("span", "variant-dataset", group.dataset);
+  const label = createElement("span", "variant-label", group.label);
+  identity.append(dataset, label);
+
+  const details = createElement("div", "variant-details");
+  details.append(
+    createElement("span", "variant-task", TASK_LABELS[group.task] ?? group.task),
+    createElement("span", "variant-separator", "·"),
+    createElement(
+      "span",
+      "variant-adaptation",
+      ADAPTATION_LABELS[group.adaptation] ?? group.adaptation,
+    ),
+    createElement("span", "variant-separator", "·"),
+    createElement(
+      "span",
+      group.extended === "true" ? "variant-extended variant-extended--yes" : "variant-extended",
+      group.extended === "true" ? "Extended training" : "Standard training",
+    ),
+  );
+
+  const countText =
+    visibleCount === group.rows.length
+      ? `${group.rows.length} ${group.rows.length === 1 ? "result" : "results"}`
+      : `${visibleCount} of ${group.rows.length} results`;
+  const count = createElement("span", "variant-count", countText);
+
+  const content = createElement("div", "variant-content");
+  const main = createElement("div", "variant-main");
+  main.append(identity, details);
+  content.append(main, count);
+  cell.append(content);
+  row.append(cell);
+  return row;
+}
+
+function relativeHeatStyle(value, range, singleConfiguration = false) {
+  if (singleConfiguration) {
+    return { hue: 142, equal: false };
+  }
+  if (range.max === range.min) {
+    return { hue: 77, equal: true };
+  }
+  const normalized = (value - range.min) / (range.max - range.min);
+  return { hue: 8 + normalized * 134, equal: false };
+}
+
+function metricCell(row, group, field) {
+  const range = group.ranges[field];
+  const heat = relativeHeatStyle(row[field], range, group.rows.length === 1);
+  const isBest = Math.abs(row[field] - range.max) < 1e-12;
+  const cell = createElement(
+    "td",
+    `metric-cell${isBest ? " metric-cell--best" : ""}${heat.equal ? " metric-cell--equal" : ""}`,
+  );
+  cell.style.setProperty("--heat-hue", heat.hue.toFixed(1));
+  cell.title = isBest ? `Best ${field.replace("_", " ")} in this variant` : "";
+
+  const value = createElement("span", "metric-value", row[field].toFixed(3));
+  cell.append(value);
+  if (isBest) {
+    cell.append(createElement("span", "sr-only", " (best in this variant)"));
+  }
+  return cell;
+}
+
+function resultRow(row, group) {
+  const tableRow = createElement("tr", "result-row");
+
+  const rankCell = createElement("td", "rank-cell");
+  const rankBadge = createElement(
+    "span",
+    `rank-badge${row.rank === 1 ? " rank-badge--first" : ""}`,
+    String(row.rank),
+  );
+  rankBadge.title = "Global F1 rank within the complete variant";
+  rankCell.append(rankBadge);
+
+  const familyCell = createElement("td");
+  const family = createElement(
+    "span",
+    `family-pill family-pill--${row.model_family.toLowerCase()}`,
+    row.model_family,
+  );
+  familyCell.append(family);
+
+  const modelCell = createElement("td", "model-cell", row.model);
+  const methodCell = createElement("td", "method-cell", row.method);
+  const representationCell = createElement(
+    "td",
+    "representation-cell",
+    row.representation === "none" ? "—" : row.representation,
+  );
+
+  const sourceCell = createElement("td", "source-cell");
+  const source = createElement("a", "source-link");
+  source.href = row.source;
+  source.target = "_blank";
+  source.rel = "noreferrer";
+  source.append(
+    document.createTextNode(`Table ${sourceTable(row)} `),
+    createElement("span", "source-arrow", "↗"),
+  );
+  sourceCell.append(source);
+
+  tableRow.append(
+    rankCell,
+    familyCell,
+    modelCell,
+    methodCell,
+    representationCell,
+    ...METRIC_FIELDS.map((field) => metricCell(row, group, field)),
+    sourceCell,
+  );
+  return tableRow;
+}
+
+function togetherResultRow(row, group) {
+  const tableRow = createElement("tr", "result-row together-row");
+
+  const rankCell = createElement("td", "rank-cell");
+  const rankBadge = createElement(
+    "span",
+    `rank-badge${row.rank === 1 ? " rank-badge--first" : ""}`,
+    String(row.rank),
+  );
+  rankBadge.title = "Global F1 rank within the complete variant";
+  rankCell.append(rankBadge);
+
+  const datasetCell = createElement("td", "dataset-cell", row.dataset);
+  const labelCell = createElement("td", "label-cell", row.label);
+
+  const familyCell = createElement("td");
+  const family = createElement(
+    "span",
+    `family-pill family-pill--${row.model_family.toLowerCase()}`,
+    row.model_family,
+  );
+  familyCell.append(family);
+
+  const modelCell = createElement("td", "model-cell", row.model);
+  const taskCell = createElement("td", "task-cell", TASK_LABELS[row.task] ?? row.task);
+  const adaptationCell = createElement(
+    "td",
+    "adaptation-cell",
+    ADAPTATION_LABELS[row.adaptation] ?? row.adaptation,
+  );
+
+  const extendedCell = createElement("td");
+  extendedCell.append(
+    createElement(
+      "span",
+      row.extended === "true" ? "extended-pill extended-pill--yes" : "extended-pill",
+      row.extended === "true" ? "Yes" : "No",
+    ),
+  );
+
+  const methodCell = createElement("td", "method-cell", row.method);
+  const representationCell = createElement(
+    "td",
+    "representation-cell",
+    row.representation === "none" ? "—" : row.representation,
+  );
+
+  const sourceCell = createElement("td", "source-cell");
+  const source = createElement("a", "source-link");
+  source.href = row.source;
+  source.target = "_blank";
+  source.rel = "noreferrer";
+  source.append(
+    document.createTextNode(`Table ${sourceTable(row)} `),
+    createElement("span", "source-arrow", "↗"),
+  );
+  sourceCell.append(source);
+
+  tableRow.append(
+    rankCell,
+    datasetCell,
+    labelCell,
+    familyCell,
+    modelCell,
+    taskCell,
+    adaptationCell,
+    extendedCell,
+    methodCell,
+    representationCell,
+    ...METRIC_FIELDS.map((field) => metricCell(row, group, field)),
+    sourceCell,
+  );
+  return tableRow;
 }
 
 function updateSortControls() {
+  const sortScope =
+    state.view === "grouped" ? "inside each variant" : "across all visible configurations";
   elements.sortButtons.forEach((button) => {
     const active = button.dataset.sort === state.sort.key;
     button.dataset.active = String(active);
     button.dataset.direction = active ? state.sort.direction : "";
     button.setAttribute("aria-pressed", String(active));
-    const label = button.textContent.trim().replace(/[↕↑↓]/g, "").trim();
+    const label = button.textContent.trim();
     button.setAttribute(
       "aria-label",
       active
-        ? `${label}, sorted ${state.sort.direction === "asc" ? "ascending" : "descending"}`
-        : `Sort by ${label}`,
+        ? `${label}, sorted ${state.sort.direction === "asc" ? "ascending" : "descending"} ${sortScope}`
+        : `Sort ${sortScope} by ${label}`,
     );
   });
 }
 
 function render() {
-  const visibleRows = sortedRows(filteredRows());
-  elements.body.innerHTML = visibleRows.map(rowTemplate).join("");
-  elements.table.hidden = visibleRows.length === 0;
+  const matchingGroups = [];
+
+  state.groups.forEach((group) => {
+    if (!groupMatchesFilters(group)) {
+      return;
+    }
+
+    const matchingRows = group.rows.filter(rowMatchesFilters);
+    if (matchingRows.length === 0) {
+      return;
+    }
+
+    matchingGroups.push({ group, rows: matchingRows });
+  });
+
+  const visibleRows = [];
+  const groupedFragment = document.createDocumentFragment();
+  const togetherFragment = document.createDocumentFragment();
+
+  if (state.view === "grouped") {
+    matchingGroups.forEach(({ group, rows }) => {
+      const orderedRows = sortedRows(rows);
+      groupedFragment.append(variantHeader(group, orderedRows.length));
+      orderedRows.forEach((row) => {
+        groupedFragment.append(resultRow(row, group));
+        visibleRows.push(row);
+      });
+    });
+  } else {
+    const orderedRows = sortedRows(matchingGroups.flatMap(({ rows }) => rows));
+    orderedRows.forEach((row) => {
+      togetherFragment.append(togetherResultRow(row, state.groupByKey.get(row.groupKey)));
+      visibleRows.push(row);
+    });
+  }
+
+  elements.body.replaceChildren(groupedFragment);
+  elements.togetherBody.replaceChildren(togetherFragment);
+  state.visibleRows = visibleRows;
+  elements.table.hidden = visibleRows.length === 0 || state.view !== "grouped";
+  elements.togetherTable.hidden = visibleRows.length === 0 || state.view !== "together";
   elements.emptyState.hidden = visibleRows.length !== 0;
-  elements.resultsSummary.innerHTML = `Showing <strong>${visibleRows.length}</strong> of <strong>${state.rows.length}</strong> configurations`;
+  elements.copyButton.disabled = visibleRows.length === 0;
+
+  const visibleGroups = matchingGroups.length;
+  const groupWord = visibleGroups === 1 ? "variant" : "variants";
+  const viewLabel = state.view === "grouped" ? "grouped view" : "all-together view";
+  elements.resultsSummary.innerHTML =
+    `Showing <strong>${visibleRows.length}</strong> of <strong>${state.rows.length}</strong> ` +
+    `configurations across <strong>${visibleGroups}</strong> ${groupWord} · ${viewLabel}`;
   updateSortControls();
 }
 
-function bindEvents() {
-  const filterBindings = [
-    [elements.datasetFilter, "dataset"],
-    [elements.familyFilter, "family"],
-    [elements.modelFilter, "model"],
-  ];
+function resetFilters() {
+  state.filters.dataset = "";
+  state.filters.extended = "all";
+  state.filters.adaptation = "all";
+  state.filters.families = new Set(["Encoder", "Decoder"]);
+  state.filters.model = "";
+  state.filters.query = "";
+  state.sort =
+    state.view === "grouped"
+      ? { key: "rank", direction: "asc" }
+      : { key: "global_f1", direction: "desc" };
 
-  filterBindings.forEach(([select, field]) => {
-    select.addEventListener("change", () => {
-      state.filters[field] = select.value;
+  elements.datasetFilter.value = "";
+  elements.modelFilter.value = "";
+  elements.searchFilter.value = "";
+  elements.extendedButtons.forEach((button) => {
+    button.setAttribute("aria-pressed", String(button.dataset.value === "all"));
+  });
+  elements.adaptationButtons.forEach((button) => {
+    button.setAttribute("aria-pressed", String(button.dataset.value === "all"));
+  });
+  elements.familyInputs.forEach((input) => {
+    input.checked = true;
+  });
+  render();
+}
+
+function bindEvents() {
+  elements.datasetFilter.addEventListener("change", () => {
+    state.filters.dataset = elements.datasetFilter.value;
+    render();
+  });
+
+  elements.extendedButtons.forEach((button) => {
+    button.addEventListener("click", () => {
+      state.filters.extended = button.dataset.value;
+      elements.extendedButtons.forEach((candidate) => {
+        candidate.setAttribute("aria-pressed", String(candidate === button));
+      });
       render();
     });
   });
 
-  elements.resetButton.addEventListener("click", () => {
-    state.filters = { dataset: "", family: "", model: "" };
-    state.sort = { key: "global_f1", direction: "desc" };
-    elements.datasetFilter.value = "";
-    elements.familyFilter.value = "";
-    elements.modelFilter.value = "";
+  elements.adaptationButtons.forEach((button) => {
+    button.addEventListener("click", () => {
+      state.filters.adaptation = button.dataset.value;
+      elements.adaptationButtons.forEach((candidate) => {
+        candidate.setAttribute("aria-pressed", String(candidate === button));
+      });
+      render();
+    });
+  });
+
+  elements.viewButtons.forEach((button) => {
+    button.addEventListener("click", () => {
+      state.view = button.dataset.value;
+      state.sort =
+        state.view === "grouped"
+          ? { key: "rank", direction: "asc" }
+          : { key: "global_f1", direction: "desc" };
+      elements.viewButtons.forEach((candidate) => {
+        candidate.setAttribute("aria-pressed", String(candidate === button));
+      });
+      render();
+    });
+  });
+
+  elements.familyInputs.forEach((input) => {
+    input.addEventListener("change", () => {
+      if (input.checked) {
+        state.filters.families.add(input.value);
+      } else {
+        state.filters.families.delete(input.value);
+      }
+      render();
+    });
+  });
+
+  elements.modelFilter.addEventListener("change", () => {
+    state.filters.model = elements.modelFilter.value;
     render();
   });
+
+  elements.searchFilter.addEventListener("input", () => {
+    state.filters.query = elements.searchFilter.value.trim().toLowerCase();
+    render();
+  });
+
+  elements.resetButton.addEventListener("click", resetFilters);
 
   elements.sortButtons.forEach((button) => {
     button.addEventListener("click", () => {
       const key = button.dataset.sort;
       if (state.sort.key === key) {
-        state.sort.direction = state.sort.direction === "desc" ? "asc" : "desc";
+        state.sort.direction = state.sort.direction === "asc" ? "desc" : "asc";
       } else {
         state.sort.key = key;
         state.sort.direction = key === "rank" ? "asc" : "desc";
@@ -287,22 +640,87 @@ function bindEvents() {
       render();
     });
   });
+
+  elements.copyButton.addEventListener("click", copyFilteredCsv);
+}
+
+function csvCell(value) {
+  const stringValue = String(value);
+  return /[",\n]/.test(stringValue) ? `"${stringValue.replaceAll('"', '""')}"` : stringValue;
+}
+
+async function copyFilteredCsv() {
+  const headers = [
+    "dataset",
+    "label",
+    "model_family",
+    "model",
+    "task",
+    "adaptation",
+    "extended",
+    "method",
+    "representation",
+    "global_f1",
+    "user_f1",
+    "text_f1",
+    "source",
+  ];
+  const csv = [
+    headers.join(","),
+    ...state.visibleRows.map((row) =>
+      headers
+        .map((header) =>
+          csvCell(METRIC_FIELDS.includes(header) ? row[header].toFixed(3) : row[header]),
+        )
+        .join(","),
+    ),
+  ].join("\n");
+
+  try {
+    await navigator.clipboard.writeText(csv);
+    showToast(`${state.visibleRows.length} filtered rows copied`);
+  } catch (_error) {
+    const textArea = createElement("textarea", "clipboard-fallback");
+    textArea.value = csv;
+    textArea.setAttribute("readonly", "");
+    document.body.append(textArea);
+    textArea.select();
+    const copied = document.execCommand("copy");
+    textArea.remove();
+    showToast(copied ? `${state.visibleRows.length} filtered rows copied` : "Copy failed");
+  }
+}
+
+let toastTimer;
+function showToast(message) {
+  window.clearTimeout(toastTimer);
+  elements.toast.textContent = message;
+  elements.toast.hidden = false;
+  toastTimer = window.setTimeout(() => {
+    elements.toast.hidden = true;
+  }, 2200);
 }
 
 function showLoadError(error) {
   elements.resultsSummary.textContent = "The leaderboard data could not be loaded.";
   elements.table.hidden = true;
+  elements.togetherTable.hidden = true;
   elements.emptyState.hidden = false;
+  elements.copyButton.disabled = true;
   elements.emptyState.querySelector("h3").textContent = "Unable to load scores.csv";
   elements.emptyState.querySelector("p").textContent = error.message;
 }
 
 async function initialize() {
   try {
-    state.rows = enrichRows(await loadRows());
-    elements.totalConfigurations.textContent = state.rows.length;
+    const { rows, groups } = enrichRows(await loadRows());
+    state.rows = rows;
+    state.groups = groups;
+    state.groupByKey = new Map(groups.map((group) => [group.key, group]));
+    elements.totalConfigurations.textContent = rows.length;
+    elements.footerSummary.textContent =
+      `${rows.length} results · ${uniqueValues("dataset").length} datasets · ${uniqueValues("model").length} models`;
     populateSelect(elements.datasetFilter, uniqueValues("dataset"));
-    populateSelect(elements.familyFilter, uniqueValues("model_family"));
     populateSelect(elements.modelFilter, uniqueValues("model"));
     bindEvents();
     render();
