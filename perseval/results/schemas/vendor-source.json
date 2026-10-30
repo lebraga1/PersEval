@@ -1,0 +1,9 @@
+{
+  "schema_version": "1.0",
+  "source_repository": "PersEval-paper-reproduction",
+  "source_revision": null,
+  "source_state": "uncommitted-no-HEAD",
+  "schema_digest": "sha256:c75bd7d024810f3279ac3a002215eb1a6ee3c30ca19a2670f01dcc82b9a9b3aa",
+  "notice": "Upstream has no commits. Exact working-tree schema and fixture bytes were copied; a genuine source revision cannot be supplied until upstream is committed. No revision was invented.",
+  "conformance_digest": "sha256:b34df7bc95b005ac71d5c95d6ef1da721e322ccb49685344fba812b3a5f1d825"
+}

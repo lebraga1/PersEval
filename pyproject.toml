@@ -16,3 +16,6 @@ dependencies = { file = ["requirements.txt"] }
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["perseval*"]
+
+[tool.setuptools.package-data]
+"perseval.results" = ["schemas/1.0/*.json", "schemas/1.0/SHA256SUMS", "schemas/*.json"]

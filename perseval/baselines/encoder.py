@@ -14,6 +14,9 @@ import json
 import datasets
 
 from .. import config
+from ..results.context import retain_selection
+from ..results.environment import now
+from ..results.integration import begin_model_run, finish_model_run, training_parameters, model_revision
 
 
 def _compute_balanced_class_weights(labels, num_labels):
@@ -49,7 +52,13 @@ def _compute_balanced_class_weights(labels, num_labels):
 
 
 class PerspectivistEncoder():
-    def __init__(self, model_identifier, persp_dataset, label):
+    def __init__(self, model_identifier, persp_dataset, label, *, result_metadata=None):
+        self.result_metadata = dict(result_metadata or {})
+        self.persp_dataset = retain_selection(persp_dataset)
+        self.last_run = None
+        self.last_runs = {}
+        self.last_run_error = None
+        self._initialization_seed = config.seed
         # Seed before loading the classification head
         set_seed(config.seed)
 
@@ -73,6 +82,7 @@ class PerspectivistEncoder():
 
 
     def train(self):
+        self._training_started_at = now()
         # Seed both that initialization and the subsequent training stage
         set_seed(config.seed)
         self.__add_special_tokens_to_tokenizer()
@@ -115,15 +125,35 @@ class PerspectivistEncoder():
         )
         trainer.set_class_weights(class_weights)
         trainer.train()
+        self._training_finished_at = now()
+        self._training_details = {'loss':'focal-weighted-cross-entropy','gamma':5.0,'alpha':0.2,
+                                  'class_weights':class_weights.tolist()}
         return trainer
     
 
-    def predict(self, trainer):
+    def predict(self, trainer, *, result_metadata=None, record_run=True):
+        self.last_run, self.last_runs, self.last_run_error = None, {}, None
+        training = training_parameters(trainer)
+        if hasattr(self, '_training_details'):
+            training['loss'] = self._training_details
+        context = begin_model_run(
+            self, self.persp_dataset, method='perspectivist-encoder',
+            representation='user-id+traits' if self.named else 'user-id', family='encoder',
+            seed=getattr(getattr(trainer, 'args', None), 'seed', None), training=training,
+            inference={'padding':config.padding,'truncation':config.truncation,'max_length':config.max_length,
+                       'prediction_postprocessing':'argmax'}, result_metadata=result_metadata,
+            execution_details={'initialization_seed':getattr(self,'_initialization_seed',None),
+                               'training_started_at':getattr(self,'_training_started_at',None),
+                               'training_finished_at':getattr(self,'_training_finished_at',None)},
+        ) if record_run else None
+        if context is not None:
+            context['model_revision'] = model_revision(getattr(trainer,'model',None)) or context['model_revision']
         test_data, ids = self.__generate_data(self.test_split)
         predictions = trainer.predict(test_data)
         if not os.path.exists(config.prediction_dir): 
             os.makedirs(config.prediction_dir)  
-        with open(config.prediction_dir+"/predictions_%s_%s_%s_%s.csv" % (self.dataset, self.named, self.user_adaptation, self.extended), "w") as fo:
+        prediction_path = config.prediction_dir+"/predictions_%s_%s_%s_%s.csv" % (self.dataset, self.named, self.user_adaptation, self.extended)
+        with open(prediction_path, "w") as fo:
             writer = csv.DictWriter(
                 fo,
                 fieldnames=[
@@ -138,6 +168,8 @@ class PerspectivistEncoder():
                     "text_id": id[1],
                     "predictions": pred
                 })
+
+        finish_model_run(self, context, prediction_path)
 
 
     def __generate_data(self, split):

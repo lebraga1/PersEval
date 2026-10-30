@@ -106,6 +106,36 @@ Options for labels are listed below:
 # MD     -> ["offensiveness"]
 ```
 
+## 🏆 Leaderboard
+
+Published experimental results are available on the
+[PersEval leaderboard](https://OWNER.github.io/PersEval-paper-reproduction/),
+maintained in the PersEval-paper-reproduction repository.
+
+<!-- Replace OWNER in the link above with the GitHub account hosting the leaderboard. -->
+
+## Download experimental results
+
+After prediction, you can explicitly export a portable result bundle:
+
+```python
+model.predict(trainer)
+run = model.last_run
+bundle = run.export_result(output_dir="exports/")
+```
+
+The `.perseval-result.tar.gz` file is saved under `exports/` and can be imported
+into [PersEval-paper-reproduction](link to perserval-paper-reproduction repo). Export is optional and does not upload results.
+
+In Google Colab, download the file to your computer:
+
+```python
+from google.colab import files
+files.download(str(bundle))
+```
+
+See the [export guide](docs/result-export.md) for more options.
+
 ## 📈 Metrics
 
 We require models to output a **label** for each **<user, text> tuple**. Starting from these prediction, we compute standard classification metrics. Specifically precision, recall and F1 scores for each class, as well as their macro- and micro-average. This same metrics are computed also at more fine-grained levels: 
