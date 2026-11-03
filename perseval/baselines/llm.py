@@ -14,9 +14,16 @@ import json
 import datasets
 
 from .. import config
+from ..results.context import retain_selection
+from ..results.integration import begin_model_run, finish_model_run, prompt_digest, model_revision
 
 class PerspectivistLLM():
-    def __init__(self, model_identifier, persp_dataset, label):
+    def __init__(self, model_identifier, persp_dataset, label, *, result_metadata=None):
+        self.persp_dataset = retain_selection(persp_dataset)
+        self.result_metadata = dict(result_metadata or {})
+        self.last_run = None
+        self.last_runs = {}
+        self.last_run_error = None
         self.model_id = model_identifier
         self.training_split = persp_dataset.training_set
         self.adaptation_split = persp_dataset.adaptation_set        
@@ -41,7 +48,18 @@ class PerspectivistLLM():
                 device="cuda")
 
 
-    def predict(self):
+    def predict(self, *, result_metadata=None, record_run=True):
+        self.last_run, self.last_runs, self.last_run_error = None, {}, None
+        context = begin_model_run(
+            self, self.persp_dataset, method='perspective-prompting' if self.named else 'base-zero',
+            representation='traits' if self.named else 'none',family='decoder', seed=None,
+            inference={'max_new_tokens':100,'do_sample':False,'prompt_template_digest':prompt_digest(config.prompts[self.dataset])},
+            result_metadata=result_metadata,
+        ) if record_run else None
+        if context is not None:
+            loaded = getattr(self,'mixtral',None) or getattr(getattr(self,'llama',None),'model',None)
+            context['model_revision'] = model_revision(loaded) or context['model_revision']
+        logical_predictions = {}
         #prep output path
         if not os.path.exists(self.output_path): 
             os.makedirs(self.output_path)
@@ -97,6 +115,7 @@ class PerspectivistLLM():
                         llm_response = outputs[0]["generated_text"][-1]["content"]
 
                     prediction = self.parse_output(llm_response)
+                    logical_predictions.setdefault(trait,[]).append([user_id,text_id,prediction])
                     
                     writer.writerow({
                         "user_id": user_id,
@@ -110,6 +129,13 @@ class PerspectivistLLM():
                 file.close()
 
 
+
+        for trait, rows in logical_predictions.items():
+            finish_model_run(self,context,pd.DataFrame(rows,columns=['user_id','text_id','predictions']),key=trait,
+                             metadata={'inference':{**context['inference'],'perspective':str(trait)}} if context else None)
+
+        if len(logical_predictions) != 1:
+            self.last_run = None
 
     def create_prompt(self, text, trait):
         prompt_options = config.prompts[self.dataset]

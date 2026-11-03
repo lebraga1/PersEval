@@ -15,9 +15,16 @@ import json
 import datasets
 
 from .. import config
+from ..results.context import retain_selection
+from ..results.integration import begin_model_run, finish_model_run, parsed_label, model_revision, prompt_digest
 
 class PerspectivistLaMP():
-    def __init__(self, model_identifier, persp_dataset, label, context,dataset_name):
+    def __init__(self, model_identifier, persp_dataset, label, context,dataset_name, *, result_metadata=None):
+        self.persp_dataset = retain_selection(persp_dataset)
+        self.result_metadata = dict(result_metadata or {})
+        self.last_run = None
+        self.last_runs = {}
+        self.last_run_error = None
         self.model_id = model_identifier
         self.label = label
         self.named = persp_dataset.named
@@ -94,7 +101,8 @@ class PerspectivistLaMP():
             return out
         return prompt
 
-    def evaluate_dataset(self):
+    def evaluate_dataset(self, *, result_metadata=None, record_run=True):
+        self.last_run, self.last_runs, self.last_run_error = None, {}, None
         # Load the tokenizer and model
         self.tokenizer.pad_token = self.tokenizer.eos_token
         prompt_generator = self.create_prompt_generator(self.num_profiles, self.label)
@@ -105,8 +113,19 @@ class PerspectivistLaMP():
         
         preprocessor = self.create_preprocessor()
         for file in files:
+            context = begin_model_run(
+                self,self.persp_dataset,method='ipa-lamp',family='decoder',
+                representation='traits+user-history' if self.named else 'user-history',
+                inference={'max_new_tokens':100,'do_sample':False,'num_profiles':self.num_profiles,
+                           'max_length':self.max_length,'context':self.context},
+                result_metadata=result_metadata,
+            ) if record_run else None
+            logical_predictions = []
             with open(f'{config.data_lamp_dir}/{file}') as f:
                 data = json.load(f)
+                if context is not None:
+                    context['inference']['input_digest'] = prompt_digest(data)
+                    context['model_revision'] = model_revision(self.model) or context['model_revision']
                 print(f'Processing {file}')
             if not os.path.exists(f'{config.data_lamp_dir}/output/'):
                 os.makedirs(f'{config.data_lamp_dir}/output/')
@@ -137,7 +156,12 @@ class PerspectivistLaMP():
                                 )
                                 outputs.append(output)
                             generated_ids = output[:, inputs["input_ids"].shape[-1]:]
-                            writer.writerow([d, element['id'],self.tokenizer.decode(generated_ids[0], skip_special_tokens=True)])
+                            decoded = self.tokenizer.decode(generated_ids[0], skip_special_tokens=True)
+                            writer.writerow([d, element['id'],decoded])
+                            logical_predictions.append([d,element['id'],parsed_label(decoded,config.label_map[self.label+'_pred'])])
+            finish_model_run(self,context,pd.DataFrame(logical_predictions,columns=['user_id','text_id','predictions']),key=file)
+        if len(files) != 1:
+            self.last_run = None
 
 
     def merge_data(self, input, output, ranks,label):

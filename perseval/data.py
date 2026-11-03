@@ -9,6 +9,7 @@ from datasets import load_dataset, concatenate_datasets, load_from_disk
 from sklearn.model_selection import train_test_split
 
 from . import config
+from .results.context import capture_split
 
 import os
 from pathlib import Path
@@ -55,6 +56,11 @@ class PerspectivistDataset:
         self.adaptation_text_ids = None
         self.test_text_ids  = None
         
+    def save_result_context(self, path, *, label=None):
+        """Persist JSON test/split context for later offline custom-prediction export."""
+        from .results.context import save_context
+        return save_context(self, path, label=label)
+
     def available_labels(self):
         """Return the labels available for this dataset."""
         return list(self.labels.keys())
@@ -275,6 +281,7 @@ class Epic(PerspectivistDataset):
         self.key_user = 'user'
         self.key_text = 'id_original'
 
+    @capture_split
     def get_splits(self, extended, user_adaptation, named, baseline=False):
         if not user_adaptation in [False, "train", "test"]:
             raise Exception(
@@ -442,6 +449,7 @@ class Brexit(PerspectivistDataset):
 
 
 
+    @capture_split
     def get_splits(self, extended, user_adaptation, named, baseline=False):
         if not user_adaptation in [False, "train", "test"]:
             raise Exception(
@@ -580,6 +588,7 @@ class DICES(PerspectivistDataset):
         self.key_text = 'text_id'
 
 
+    @capture_split
     def get_splits(self, extended, user_adaptation, named, baseline=False):
         if not user_adaptation in [False, "train", "test"]:
             raise Exception(
@@ -730,6 +739,7 @@ class MHS(PerspectivistDataset):
         self.key_user = 'annotator_id'
         self.key_text = 'comment_id'
 
+    @capture_split
     def get_splits(self, extended, user_adaptation, named, baseline = False):
         if not user_adaptation in [False, "train", "test"]:
             raise Exception(
@@ -923,6 +933,7 @@ class MD(PerspectivistDataset):
         self.key_user = 'annotators'
         self.key_text = 'text_id'
 
+    @capture_split
     def get_splits(self, extended, user_adaptation, named, baseline=False):
         if not user_adaptation in [False, "train", "test"]:
             raise Exception(
