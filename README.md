@@ -109,10 +109,8 @@ Options for labels are listed below:
 ## 🏆 Leaderboard
 
 Published experimental results are available on the
-[PersEval leaderboard](https://OWNER.github.io/PersEval-paper-reproduction/),
-maintained in the PersEval-paper-reproduction repository.
-
-<!-- Replace OWNER in the link above with the GitHub account hosting the leaderboard. -->
+[PersEval leaderboard](https://icperspectivismo.github.io/PersEval-experimental-results/),
+maintained in the [PersEval-paper-reproduction](https://github.com/ICperspectivismo/PersEval-experimental-results/) repository.
 
 ## Download experimental results
 
