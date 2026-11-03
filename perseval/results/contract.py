@@ -78,7 +78,7 @@ class Contract:
         files = {p.name: p.read_bytes() for p in directory.glob('*.schema.json')}
         inventory = checksum_bytes(files)
         if inventory != (directory / 'SHA256SUMS').read_bytes():
-            raise ProtocolError('vendored schema checksum mismatch (schema drift). Restore exact schema 1.0 files and SHA256SUMS from the reviewed PersEval-paper-reproduction contract; do not edit vendored schemas individually or fetch them during export.')
+            raise ProtocolError('vendored schema checksum mismatch (schema drift). Restore exact schema 1.0 files and SHA256SUMS from the reviewed PersEval-experimental-results contract; do not edit vendored schemas individually or fetch them during export.')
         self.schema_digest = digest(inventory)
         self.vendor_source = json.loads((directory.parent / 'vendor-source.json').read_bytes())
         if self.vendor_source['schema_digest'] != self.schema_digest:

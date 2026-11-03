@@ -88,7 +88,7 @@ def test_vendored_schema_inventory_and_honest_source_record():
     path=Path(importlib.import_module('perseval.results.contract').__file__).parent/'schemas/1.0'
     assert checksum_bytes({p.name:p.read_bytes() for p in path.glob('*.schema.json')})==(path/'SHA256SUMS').read_bytes()
     assert digest((path/'SHA256SUMS').read_bytes())==contract.schema_digest
-    assert contract.vendor_source['source_repository']=='PersEval-paper-reproduction'
+    assert contract.vendor_source['source_repository']=='PersEval-experimental-results'
     revision=contract.vendor_source['source_revision']
     if revision is None:
         assert contract.vendor_source['source_state']=='uncommitted-no-HEAD'

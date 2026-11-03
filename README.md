@@ -110,7 +110,7 @@ Options for labels are listed below:
 
 Published experimental results are available on the
 [PersEval leaderboard](https://icperspectivismo.github.io/PersEval-experimental-results/),
-maintained in the [PersEval-paper-reproduction](https://github.com/ICperspectivismo/PersEval-experimental-results/) repository.
+maintained in the [PersEval-experimental-results](https://github.com/ICperspectivismo/PersEval-experimental-results/) repository.
 
 ## Download experimental results
 
@@ -123,7 +123,7 @@ bundle = run.export_result(output_dir="exports/")
 ```
 
 The `.perseval-result.tar.gz` file is saved under `exports/` and can be imported
-into [PersEval-paper-reproduction](link to perserval-paper-reproduction repo). Export is optional and does not upload results.
+into [PersEval-experimental-results](https://github.com/ICperspectivismo/PersEval-experimental-results/). Export is optional and does not upload results.
 
 In Google Colab, download the file to your computer:
 

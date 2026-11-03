@@ -31,7 +31,7 @@ files.download(str(bundle))
 
 ## Publish to the leaderboard
 
-In an installed, configured, clean PersEval-paper-reproduction checkout:
+In an installed, configured, clean PersEval-experimental-results checkout:
 
 ```sh
 perseval-results publish-bundle /path/to/result.perseval-result.tar.gz \

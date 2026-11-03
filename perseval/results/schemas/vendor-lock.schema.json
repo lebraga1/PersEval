@@ -15,7 +15,7 @@
       "const": "1.0"
     },
     "source_repository": {
-      "const": "PersEval-paper-reproduction"
+      "const": "PersEval-experimental-results"
     },
     "source_revision": {
       "type": "string",
