@@ -7,45 +7,12 @@ output_root = Path(
 
 seed = 42
 
-# Datasets with "strategy": "legacy" keep the split used in the PersEval paper.
-# Any dataset without an entry here is split automatically (see auto_split below).
-dataset_specific_splits = {
-    "EPIC": {
-        "strategy": "legacy",
-        "user_based_split_percentage" : 0.2,
-        "text_based_split_percentage" : 0.05,
-    },
-    "DICES": {
-        "strategy": "legacy",
-        "user_based_split_percentage" : 0.2,
-        "text_based_split_percentage" : 0.05,
-    },
-    "BREXIT": {
-        "strategy": "legacy",
-        "user_based_split_percentage" : 0.2,
-        "text_based_split_percentage_train" : 0.7,
-        "text_based_split_percentage_dev" : 0.05,
-    },
-    "MHS": {
-        "strategy": "legacy",
-        "user_based_split_percentage" : 0.2,
-        "text_based_split_percentage" : 0.05,
-    },
-    "MD":{
-        "strategy": "legacy",
-        "user_based_split_percentage" : 0.2,
-        "text_based_split_percentage" : 0.05,  
-    }
-}
-
-# Automatic split (perseval/splitting.py). A dataset can override any of these
-# values with an "auto_split" dict in its dataset_specific_splits entry.
 auto_split = {
-    "test_user_fraction": 0.2,        # fraction of the annotators used as test users
-    "adaptation_fraction": 0.05,      # fraction of the test users' texts used for adaptation
-    "target_test_share": 0.2,         # test annotations / (training with extended=False + test)
-    "min_test_annotations": 10,       # every test user is evaluated on at least this many texts
-    "min_adaptation_annotations": 1,  # every test user has at least this many adaptation texts
+    "test_user_fraction": 0.2,
+    "adaptation_fraction": 0.05,
+    "target_test_share": 0.2,  # test / (test + training with extended=False)
+    "min_test_annotations": 10,
+    "min_adaptation_annotations": 1,
 }
 
 padding="max_length"

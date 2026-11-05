@@ -1,12 +1,11 @@
 import logging as log
-from random import seed, sample
+from random import seed
 from dataclasses import dataclass  
 import copy                                             
 
 from tqdm import tqdm
 import numpy as np
 from datasets import Dataset, load_dataset, concatenate_datasets, load_from_disk
-from sklearn.model_selection import train_test_split
 
 from . import config
 from .splitting import auto_split
@@ -57,9 +56,8 @@ class PerspectivistDataset:
         self.train_user_ids = None
         self.adaptation_text_ids = None
         self.test_text_ids  = None
-        # Optional annotator column used to stratify the test users (auto strategy)
+        # annotator column to stratify test users by (auto split)
         self.key_group = None
-        self.split_strategy = None
         self.split_report = None
         
     def available_labels(self):
@@ -101,7 +99,7 @@ class PerspectivistDataset:
 
         return description
 
-    def get_splits(self, extended, user_adaptation, named, baseline=False, split_strategy=None):
+    def get_splits(self, extended, user_adaptation, named, baseline=False):
         if not user_adaptation in [False, "train", "test"]:
             raise Exception(
                 "Possible values are:\n \
@@ -115,7 +113,6 @@ class PerspectivistDataset:
         self.user_adaptation = user_adaptation
         self.named = named
         self.extended = extended
-        self.split_strategy = split_strategy or self.default_split_strategy()
 
         self.training_set = self.adaptation_set = self.test_set = None
 
@@ -133,49 +130,19 @@ class PerspectivistDataset:
         self.check_splits(user_adaptation, extended, named)
         self.describe_splits()
 
-    def default_split_strategy(self):
-        # Datasets whose split is fixed in the config keep it, so that published
-        # results stay reproducible. Any other dataset is split automatically.
-        return config.dataset_specific_splits.get(self.name, {}).get("strategy", "auto")
-
     def sample_split_ids(self):
-        if self.split_strategy == "legacy":
-            return self._legacy_sample_split_ids()
-        if self.split_strategy == "auto":
-            return self._auto_sample_split_ids()
-        raise ValueError("Unknown split strategy %r. Possible values are 'auto' and 'legacy'." % self.split_strategy)
-
-    def _auto_sample_split_ids(self):
         user_groups = None
         if self.key_group:
             user_groups = dict(zip(self.dataset[self.key_user], self.dataset[self.key_group]))
-        params = {**config.auto_split, **config.dataset_specific_splits.get(self.name, {}).get("auto_split", {})}
         plan = auto_split(self.dataset[self.key_user], self.dataset[self.key_text],
-                          user_groups=user_groups, seed=config.seed, **params)
+                          user_groups=user_groups, seed=config.seed, **config.auto_split)
         self.split_report = plan.report
-        log.info("Auto split: reserve %.0f%% of the texts for training, %d test users, test share %.0f%%",
+        log.info("Split: reserve %.0f%% of the texts for training, %d test users, test share %.0f%%",
                  100 * plan.report["reserve"], plan.report["test_users"], 100 * plan.report["test_share"])
         if not plan.report["target_met"]:
-            log.warning("Auto split could not bring the test share down to %.0f%% (got %.0f%%)",
+            log.warning("Split could not bring the test share down to %.0f%% (got %.0f%%)",
                         100 * plan.report["target_test_share"], 100 * plan.report["test_share"])
         return plan.train_user_ids, plan.test_user_ids, plan.adaptation_text_ids, plan.test_text_ids
-
-    def _legacy_sample_split_ids(self):
-        user_ids = set(list(self.dataset[self.key_user]))
-        percentages = config.dataset_specific_splits[self.name]
-
-        # Sample adapt+test users
-        seed(config.seed)
-        adaptation_test_user_ids = sample(sorted(user_ids), int(len(user_ids) * percentages["user_based_split_percentage"]))
-        test_users = set(adaptation_test_user_ids)
-        train_user_ids = [u for u in user_ids if not u in test_users]
-
-        adapt_test_text_id = [t_id for t_id, user in zip(self.dataset[self.key_text], self.dataset[self.key_user]) if user in test_users]
-        seed(config.seed)
-        adaptation_text_ids = sample(sorted(adapt_test_text_id), int(len(adapt_test_text_id) * percentages["text_based_split_percentage"]))
-        adaptation_texts = set(adaptation_text_ids)
-        test_text_ids = [t_id for t_id in adapt_test_text_id if t_id not in adaptation_texts]
-        return train_user_ids, adaptation_test_user_ids, adaptation_text_ids, test_text_ids
 
     def read_text(self, row):
         raise NotImplementedError
@@ -501,25 +468,6 @@ class Brexit(PerspectivistDataset):
         self.key_text = 'instance_id'
         self.key_group = 'annotator_group'
 
-    def _legacy_sample_split_ids(self):
-        users_group_ids = self.dataset.to_pandas()[["annotator_id", "annotator_group"]].drop_duplicates()
-        user_ids = list(users_group_ids['annotator_id'])
-        user_group = list(users_group_ids['annotator_group']) 
-
-        # Sample adapt+test users
-        seed(config.seed)
-        train_user_ids, adaptation_test_user_ids = train_test_split(user_ids,
-                                                        test_size=config.dataset_specific_splits[self.name]["user_based_split_percentage"],
-                                                        random_state=config.seed,
-                                                        shuffle=True, stratify=user_group)
-        seed(config.seed)
-        all_text_ids = list(set(self.dataset["instance_id"]))
-        train_text_ids = sample(sorted(all_text_ids), int(len(all_text_ids)*config.dataset_specific_splits[self.name]["text_based_split_percentage_train"]))
-        adaptation_test_text_ids = [t for t in all_text_ids if t not in train_text_ids]
-        adaptation_text_ids = sample(sorted(adaptation_test_text_ids), int(len(adaptation_test_text_ids)*config.dataset_specific_splits[self.name]["text_based_split_percentage_dev"]))
-        test_text_ids = [t for t in adaptation_test_text_ids if t not in adaptation_text_ids]
-        return train_user_ids, adaptation_test_user_ids, adaptation_text_ids, test_text_ids
-
     def read_text(self, row):
         return {"tweet": row['tweet']}
 
@@ -688,11 +636,11 @@ class ConvAbuse(PerspectivistDataset):
         self.label = label or config.dataset_label[self.name]
         df = load_dataset("csv", data_files=self.URL)["train"].to_pandas()
         df[self.EXCHANGE] = df[self.EXCHANGE].fillna("")
-        # example_no numbers the rows: the same exchange, labelled by several annotators, has several numbers
+        # an exchange labelled by several annotators has one example_no per annotator
         df["text_id"] = df.groupby(["conv_id"] + self.EXCHANGE, dropna=False)["example_no"].transform("min")
-        # Some exchanges were labelled twice by the same annotator to measure intra-annotator agreement
+        # some exchanges were labelled twice by the same annotator
         df = df.drop_duplicates(["annotator_id", "text_id"])
-        # Abusive is -1 (mildly) to -3 (strongly); 0 (ambiguous) and 1 (non-abusive) are not
+        # abusive: -1 to -3; ambiguous (0) and non-abusive (1) are not
         df[self.label] = (df[["is_abuse.-1", "is_abuse.-2", "is_abuse.-3"]].sum(axis=1) > 0).astype(int)
         self.dataset = Dataset.from_pandas(df, preserve_index=False)
         self.labels[self.label] = set()
@@ -720,10 +668,10 @@ class CSC(PerspectivistDataset):
         self.name = "CSC"
         self.label = label or config.dataset_label[self.name]
         df = load_dataset("csv", data_files=self.URL, delimiter="\t")["train"].to_pandas()
-        # A text is the response of one speaker to one context
+        # a text is one speaker's response to one context
         df["text_id"] = df["global_context_name"].astype(str) + "_" + df["global_speaker"].astype(str)
         df = df.drop_duplicates(["global_evaluator", "text_id"])
-        # 1-6 Likert scale, binary-coded as in Jang and Frassinelli (2024): 4 (somewhat) or more is sarcastic
+        # sarcastic: 4 or more on the 1-6 scale, as in Jang and Frassinelli (2024)
         df[self.label] = (df["sarcasm_score_by_evaluator"] >= 4).astype(int)
         df = df.astype(object).where(df.notna(), None)
         self.dataset = Dataset.from_pandas(df, preserve_index=False)

@@ -1,23 +1,5 @@
-"""Automatic split planning for perspectivist datasets.
-
-The protocol has two hard constraints:
-
-* test users never appear in the training split;
-* with ``extended=False``, texts in the test split never appear in the training split.
-
-On a sparse dataset (few annotators per text) both hold with a plain split by
-user. On a dense one (every annotator sees most texts) every text ends up
-annotated by some test user, so the second constraint wipes out the training
-split. ``auto_split`` handles both cases with a single knob: a fraction of the
-texts is *reserved* for training only (as BREXIT used to do by hand) and the
-smallest reserve that brings the test split down to ``target_test_share`` is
-chosen automatically.
-
-Everything here works on plain ``(user, text)`` pairs, so it does not depend on
-any dataset class.
-"""
+from collections import Counter
 from dataclasses import dataclass, field
-from math import ceil
 from random import Random
 
 
@@ -74,7 +56,6 @@ def auto_split(user_ids, text_ids, user_groups=None,
         plan = min(usable, key=lambda p: p.report["test_share"])
 
     plan.report.update({
-        "strategy": "auto",
         "annotations_per_text": sum(len(t) for t in texts_of_user.values()) / len(all_texts),
         "target_test_share": target_test_share,
         "target_met": plan.report["test_share"] <= target_test_share,
@@ -87,7 +68,7 @@ def _sample_test_users(all_users, texts_of_user, user_groups, fraction, min_anno
     if not eligible:
         raise ValueError(
             "No annotator has the %d annotations needed to be a test user." % min_annotations)
-    # Keep at least one user out of the test split, otherwise nothing is left to train on.
+    # at least one user stays in training
     n_test = min(max(1, round(fraction * len(all_users))), len(eligible), len(all_users) - 1)
 
     if not user_groups:
@@ -98,7 +79,7 @@ def _sample_test_users(all_users, texts_of_user, user_groups, fraction, min_anno
         by_group.setdefault(user_groups[user], []).append(user)
     groups = sorted(by_group, key=str)
     n_test = max(n_test, min(len(groups), len(eligible)))
-    # Largest remainder allocation, at least one test user per group when possible.
+    # largest remainder, at least one test user per group
     quotas = {g: n_test * len(by_group[g]) / len(eligible) for g in groups}
     allocation = {g: min(len(by_group[g]), max(1, int(quotas[g]))) for g in groups}
     for g in sorted(groups, key=lambda g: quotas[g] - int(quotas[g]), reverse=True):
@@ -118,18 +99,21 @@ def _plan_for_reserve(reserve, text_order, texts_of_user, all_users, sampled_tes
     reserved = set(text_order[:int(reserve * len(text_order))])
     own = {u: [t for t in texts_of_user[u] if t not in reserved] for u in sampled_test_users}
 
-    # Adaptation texts are sampled over *unique* texts, so the fraction holds
-    # regardless of how many test users annotated each text.
+    # sampled over unique texts, so dense texts are not over-represented
     candidates = sorted({t for u in sampled_test_users for t in own[u]})
     adaptation = set(rng.sample(candidates, int(len(candidates) * adaptation_fraction)))
+    # users the sample missed get their text with the fewest test users,
+    # otherwise texts seen by many users (MHS reference texts) dominate adaptation
+    n_test_users = Counter(t for u in sampled_test_users for t in own[u])
     for user in sorted(sampled_test_users):
         missing = min_adaptation - sum(t in adaptation for t in own[user])
         if missing > 0:
             pool = sorted(t for t in own[user] if t not in adaptation)
-            adaptation.update(rng.sample(pool, min(missing, len(pool))))
+            rng.shuffle(pool)  # random tie-break
+            pool.sort(key=n_test_users.__getitem__)
+            adaptation.update(pool[:missing])
 
-    # A test user's test annotations are their own texts outside the reserve and
-    # the adaptation set, so they do not depend on the other test users.
+    # users without enough test or adaptation texts go back to training
     test_users, dropped = set(), 0
     for user in sampled_test_users:
         n_adaptation = sum(t in adaptation for t in own[user])
