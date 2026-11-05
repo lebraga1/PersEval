@@ -1,3 +1,10 @@
+import os
+from pathlib import Path
+
+output_root = Path(
+    os.environ.get("PERSEVAL_OUTPUT_DIR", "./outputs")
+).expanduser()
+
 seed = 42
 
 # Datasets with "strategy": "legacy" keep the split used in the PersEval paper.
@@ -41,22 +48,6 @@ auto_split = {
     "min_adaptation_annotations": 1,  # every test user has at least this many adaptation texts
 }
 
-model_config = {
-    "roberta-base": {
-        "output_dir": "./checkpoints",
-        "num_train_epochs": 5,
-        "learning_rate": 5e-6,
-        "per_device_train_batch_size": 32,
-        "per_device_eval_batch_size": 32, 
-        "evaluation_strategy": "epoch",
-        "save_strategy": "epoch",
-        "logging_strategy": "epoch",
-        "overwrite_output_dir": True,
-        "load_best_model_at_end": True,
-        "report_to": None
-    }
-}
-
 padding="max_length"
 truncation=True
 max_length=512
@@ -96,8 +87,8 @@ label_map = {
 
 dataset_label ={
     "EPIC": "irony",
-    #"DICES-350":"degree_of_harm",
-    "DICES":"degree-of-harm",
+    "DICES-350":"degree_of_harm",
+    "DICES":"Q2_harmful_content_overall",
     "BREXIT":"hs",
     "MHS":"hateful",
     "MD":"offensiveness",
@@ -106,109 +97,21 @@ dataset_label ={
     "CSC": "sarcasm"
 }
 
-dataset_info = {
-    "EPIC": {
-        "task": "Irony",
-        "annotators": 74,
-        "texts": 3000,
-        "instances": 14172,
-        "source": "Twitter, Reddit",
-        "label_type": "Binary",
-        "positive_class": "Irony",
-        "metadata": ["Gender", "Nationality", "Age/Generation"],
-    },
-    "BREXIT": {
-        "task": "Abusive Language",
-        "annotators": 6,
-        "texts": 1120,
-        "instances": 3872,
-        "source": "Twitter",
-        "label_type": "Binary",
-        "positive_class": "Offensiveness",
-        "metadata": ["Target and control group"],
-    },
-    "MHS": {
-        "task": "Hate Speech",
-        "annotators": 7912,
-        "texts": 39565,
-        "instances": 135556,
-        "source": "YouTube, Twitter, Reddit",
-        "label_type": "Binary",
-        "positive_class": "Hate Speech",
-        "metadata": ["Gender", "Age/Generation", "Education", "Income"],
-    },
-    "MD": {
-        "task": "Offensiveness",
-        "annotators": 819,
-        "texts": 10753,
-        "instances": 53765,
-        "source": "Twitter",
-        "label_type": "Binary",
-        "positive_class": "Offensiveness",
-        "metadata": [],
-    },
-    "DICES": {
-        "task": "AI Safety",
-        "annotators": 123,
-        "texts": 350,
-        "instances": 43050,
-        "source": "Human-chatbot conversations",
-        "label_type": "Non-binary",
-        "positive_class": "Harmful",
-        "metadata": [
-            "Gender",
-            "Age/Generation",
-            "Education",
-            "Ethnicity",
-        ],
-    },
-    "TAS": {
-        "task": "Hate Speech, Offensive Language",
-        "annotators": 1807,
-        "texts": 3050,
-        "instances": 88138,
-        "source": "Twitter",
-        "label_type": "Binary",
-        "positive_class": "Hate Speech",
-        "metadata": ["Annotation condition", "Age/Generation", "Education", "Party"],
-    },
-    "CONVABUSE": {
-        "task": "Abuse towards conversational agents",
-        "annotators": 8,
-        "texts": 4185,
-        "instances": 12411,
-        "source": "Human-chatbot conversations",
-        "label_type": "Binary",
-        "positive_class": "Abusive",
-        "metadata": [],
-    },
-    "CSC": {
-        "task": "Sarcasm",
-        "annotators": 838,
-        "texts": 6972,
-        "instances": 30896,
-        "source": "Crowdsourced conversations",
-        "label_type": "Binary",
-        "positive_class": "Sarcastic",
-        "metadata": ["Gender", "Age/Generation", "Ethnicity"],
-    },
-}
-
 model_config = {
     "roberta-base": {
         "eval_strategy": "epoch",
         "greater_is_better":False,
         "learning_rate": 5e-6,
         "load_best_model_at_end": True,
-        "logging_dir":"./logs",
+        "logging_dir": str(output_root / "logs"),
         "logging_strategy": "epoch",
         "metric_for_best_model":"eval_loss",
         "num_train_epochs": 5,
-        "output_dir": "./results",
+        "output_dir": str(output_root / "checkpoints"),
         "overwrite_output_dir": True,
         "per_device_eval_batch_size": 32, 
         "per_device_train_batch_size": 16,
-        "report_to": None,
+        "report_to": "none",
         "save_strategy": "epoch",
         "save_total_limit": 1
     }
