@@ -73,10 +73,20 @@ perspectivist_dataset.get_splits(user_adaptation="train", extended=True, named=F
 ### Test set
 The difference between the task variants manifests in different training splits (or in some cases additional sets when using an adaptation set at inference time), while **the test set depends uniquely on the chosen dataset and it remains the same across all task variants.**
 
+### How the splits are computed
+Test users must be disjoint from training users and, without `--extended`, test texts must be disjoint from training texts. On a dense dataset (many annotators per text) almost every text is annotated by some test user, so a split by user alone would leave nothing to train on.
+
+Datasets are therefore split automatically (`perseval/splitting.py`):
+1. 20% of the annotators become test users, sampled among those with enough annotations to be evaluated (optionally stratified by an annotator column, e.g. BREXIT's groups).
+2. A fraction of the texts is reserved for training only. The smallest reserve that brings the test split down to 20% of (training + test) is chosen, so sparse datasets get little or no reserve and dense ones get a larger one.
+3. 5% of the remaining texts of the test users form the adaptation set. Every test user has at least one adaptation text and at least ten test texts. A test user left without an adaptation text gets the text of theirs annotated by the fewest test users, so that texts annotated by many users (such as the reference texts of MHS) do not end up in everyone's adaptation set.
+
+These targets live in `config.auto_split`.
+
 
 ## 🗃️ Datasets
 
-The library comes with five datasets. 
+The library comes with eight datasets. 
 
 
 | Dataset  | Reference | Task| #Annotators | Metadata | 
@@ -86,8 +96,13 @@ The library comes with five datasets.
 | MHS | [Sachdeva et al. 2022](https://aclanthology.org/2022.nlperspectives-1.11/)  | Hate Speech | 7,912 | Gender, Age/Generation, Education, Income, Ideology | 
 | MD-Agreement |[Leonaredlli et al. 2022](https://aclanthology.org/2023.semeval-1.314/)  | Offensiveness | 819 | --- | 
 |Dices | [Aroyo et al. 2024](https://proceedings.neurips.cc/paper_files/paper/2023/hash/a74b697bce4cac6c91896372abaa8863-Abstract-Datasets_and_Benchmarks.html)  | AI Safety | 123 | Gender, Age/Generation, Education, Ethinicity | 
+| TAS | [Kern et al. 2023](https://aclanthology.org/2023.findings-emnlp.992/) | Hate speech, Offensive language | 1,807 | Annotation condition, Age/Generation, Education, Party | 
+| ConvAbuse | [Cercas Curry et al. 2021](https://aclanthology.org/2021.emnlp-main.587/) | Abuse towards conversational agents | 8 | --- | 
+| CSC | [Jang and Frassinelli 2024](https://aclanthology.org/2024.naacl-long.238/) | Sarcasm | 838 | Gender, Age/Generation, Ethnicity | 
 
-BREXIT, EPIC and MHS are directly loaded from Hugging Face, while DICES and MD-Agreement are loaded from the directory configured through the `PERSEVAL_DATA_DIR` environment variable.
+BREXIT, EPIC, MHS and TAS are directly loaded from Hugging Face, ConvAbuse and CSC from a fixed commit of their GitHub repositories, while DICES and MD-Agreement are loaded from the directory configured through the `PERSEVAL_DATA_DIR` environment variable.
+
+In ConvAbuse an utterance is abusive when rated from -1 to -3 (ambiguous and non-abusive are not). In CSC a response is sarcastic when rated 4 ("somewhat") or more on the 1-6 scale, as in the original paper.
 
 Other than the dataset name, it is important to also specify the corresponding label.
 
@@ -104,6 +119,9 @@ Options for labels are listed below:
 # DICES  -> ["Q2_harmful_content_overall"]
 # MHS    -> ["hateful"]
 # MD     -> ["offensiveness"]
+# TAS    -> ["hate_speech", "offensive_language"]
+# CONVABUSE -> ["abuse"]
+# CSC    -> ["sarcasm"]
 ```
 
 ## 📈 Metrics

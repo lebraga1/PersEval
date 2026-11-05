@@ -21,6 +21,9 @@ def test_available_datasets():
     assert "dices" in datasets
     assert "mhs" in datasets
     assert "md" in datasets
+    assert "tas" in datasets
+    assert "convabuse" in datasets
+    assert "csc" in datasets
 
 def test_download_invalid_dataset():
     with pytest.raises(ValueError, match="Unknown dataset"):
@@ -178,9 +181,12 @@ def test_describe_datasets(monkeypatch):
         "dices",
         "mhs",
         "md",
+        "tas",
+        "convabuse",
+        "csc",
     }
 
-    assert download_mock.call_count == 5
+    assert download_mock.call_count == 8
     fake_dataset.describe.assert_called()
 
 
@@ -203,7 +209,7 @@ def test_describe_datasets_verbose(monkeypatch):
 
     assert isinstance(descriptions, dict)
 
-    assert download_mock.call_count == 5
+    assert download_mock.call_count == 8
     fake_dataset.describe.assert_called_with(verbose=True)
 
 

@@ -7,28 +7,12 @@ output_root = Path(
 
 seed = 42
 
-dataset_specific_splits = {
-    "EPIC": {
-        "user_based_split_percentage" : 0.2,
-        "text_based_split_percentage" : 0.05,
-    },
-    "DICES": {
-        "user_based_split_percentage" : 0.2,
-        "text_based_split_percentage" : 0.05,
-    },
-    "BREXIT": {
-        "user_based_split_percentage" : 0.2,
-        "text_based_split_percentage_train" : 0.7,
-        "text_based_split_percentage_dev" : 0.05,
-    },
-    "MHS": {
-        "user_based_split_percentage" : 0.2,
-        "text_based_split_percentage" : 0.05,
-    },
-    "MD":{
-        "user_based_split_percentage" : 0.2,
-        "text_based_split_percentage" : 0.05,  
-    }
+auto_split = {
+    "test_user_fraction": 0.2,
+    "adaptation_fraction": 0.05,
+    "target_test_share": 0.2,  # test / (test + training with extended=False)
+    "min_test_annotations": 10,
+    "min_adaptation_annotations": 1,
 }
 
 padding="max_length"
@@ -74,7 +58,10 @@ dataset_label ={
     "DICES":"Q2_harmful_content_overall",
     "BREXIT":"hs",
     "MHS":"hateful",
-    "MD":"offensiveness"
+    "MD":"offensiveness",
+    "TAS": "hate_speech",
+    "CONVABUSE": "abuse",
+    "CSC": "sarcasm"
 }
 
 model_config = {
