@@ -269,7 +269,9 @@ class Evaluator():
             "trait": self.trait_level_metrics(verbose=verbose),
         }
         if flat:
-            return flatten_metrics(results)
+            d_flat = flatten_metrics(results)
+            summary_metrics(d_flat)
+            return d_flat
         else:
             return results
 
@@ -285,7 +287,8 @@ def flatten_metrics(d, prefix=""):
             flat[key] = v
     return flat
 
+def summary_metrics(d):
+    """Output summarized metrics filter by 'macro avg/f1-score'."""
+    s = pd.Series(d, name="f1-score")
+    print(s[s.index.str.endswith("macro avg/f1-score")].to_frame())
 
-
-
-                    
