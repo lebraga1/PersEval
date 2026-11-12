@@ -7,6 +7,9 @@ output_root = Path(
 
 seed = 42
 
+# Fraction of training annotation instances held out for encoder validation.
+validation_percentage = 0.1
+
 dataset_specific_splits = {
     "EPIC": {
         "user_based_split_percentage" : 0.2,

@@ -1,19 +1,27 @@
-import sys
 import os
 
 import pandas as pd
 import csv
-from transformers import AutoTokenizer, AutoModelForSequenceClassification, AutoModelForCausalLM, \
-    Trainer, set_seed, TrainingArguments, pipeline, AutoModel
+from transformers import AutoTokenizer, AutoModelForSequenceClassification, \
+    Trainer, set_seed, TrainingArguments
 from datasets import Dataset
 import torch
+from sklearn.model_selection import train_test_split
 from sklearn.utils import compute_class_weight
 import numpy as np
-from tqdm import tqdm
-import json
-import datasets
 
 from .. import config
+
+
+def _split_training_indices(annotations, validation_percentage, seed):
+    """Hold out a reproducible fraction of training annotation instances."""
+    if not 0 < validation_percentage < 1:
+        raise ValueError("validation_percentage must be between 0 and 1 (exclusive)")
+    if len(annotations) < 2:
+        raise ValueError("Validation requires at least two training instances")
+    return train_test_split(
+        np.arange(len(annotations)), test_size=validation_percentage, random_state=seed,
+    )
 
 
 def _compute_balanced_class_weights(labels, num_labels):
@@ -72,16 +80,28 @@ class PerspectivistEncoder():
             self.model = AutoModelForSequenceClassification.from_pretrained(model_identifier, num_labels=2)
 
 
-    def train(self):
+    def train(self, *, validation_percentage=None):
+        """Train with an instance-level validation holdout (10% by default).
+
+        Validation selects the checkpoint; predict() still uses the test set.
+        The original dataset's training, adaptation and test splits are unchanged.
+        """
+        if validation_percentage is None:
+            validation_percentage = config.validation_percentage
+        train_indices, validation_indices = _split_training_indices(
+            self.training_split.annotation, validation_percentage, config.seed,
+        )
         # Seed both that initialization and the subsequent training stage
         set_seed(config.seed)
         self.__add_special_tokens_to_tokenizer()
         set_seed(config.seed)
-        data = {"train" : self.__generate_data(self.training_split)[0]}   
+        tokenized = self.__generate_data(self.training_split)[0]
+        train_dataset = tokenized.select(train_indices)
+        validation_dataset = tokenized.select(validation_indices)
 
         labels = [
-            annotation["label"][self.label]
-            for annotation in self.training_split.annotation
+            self.training_split.annotation[index]["label"][self.label]
+            for index in train_indices
         ]
         class_weights = _compute_balanced_class_weights(
             labels,
@@ -93,28 +113,40 @@ class PerspectivistEncoder():
         )
         print("Training class counts:", class_counts.tolist())
         print("Training class weights:", class_weights.tolist())
+        print("Training annotations:", len(train_dataset),
+              "| Validation annotations:", len(validation_dataset))
 
-        print('We will use the device:', torch.cuda.get_device_name(0))
-        training_args = TrainingArguments(
-            seed=config.seed,
-            output_dir=config.model_config[self.model_id]["output_dir"],
-            num_train_epochs=config.model_config[self.model_id]["num_train_epochs"],
-            learning_rate=config.model_config[self.model_id]["learning_rate"],
-            per_device_train_batch_size=config.model_config[self.model_id]["per_device_train_batch_size"],
-            save_strategy=config.model_config[self.model_id]["save_strategy"],
-            logging_strategy=config.model_config[self.model_id]["logging_strategy"],
-            overwrite_output_dir=config.model_config[self.model_id]["overwrite_output_dir"],
-            report_to=config.model_config[self.model_id]["report_to"]
-        )
-
+        training_options = {
+            "seed": config.seed,
+            "eval_strategy": "epoch",
+            "save_strategy": "epoch",
+            "load_best_model_at_end": True,
+            "metric_for_best_model": "eval_loss",
+            "greater_is_better": False,
+            "per_device_eval_batch_size": 32,
+            "save_total_limit": 1,
+            **config.model_config[self.model_id],
+        }
+        training_args = TrainingArguments(**training_options)
+        print('We will use the device:', training_args.device)
 
         trainer = CustomTrainer(
             model=self.model,
             args=training_args,
-            train_dataset=data["train"],
+            train_dataset=train_dataset,
+            eval_dataset=validation_dataset,
         )
         trainer.set_class_weights(class_weights)
         trainer.train()
+        if training_args.load_best_model_at_end and trainer.state.best_model_checkpoint is not None:
+            best_step = int(trainer.state.best_model_checkpoint.rsplit("-", 1)[-1])
+            best_epoch = next(
+                row["epoch"] for row in trainer.state.log_history
+                if row.get("step") == best_step and "eval_loss" in row
+            )
+            print("Selected epoch:", best_epoch,
+                  "| Validation loss:", trainer.state.best_metric)
+            print("Selected checkpoint:", trainer.state.best_model_checkpoint)
         return trainer
     
 
@@ -200,7 +232,7 @@ class CustomTrainer(Trainer):
     def set_class_weights(self, class_weights):
         self.class_weights = class_weights
 
-    def compute_loss(self, model, inputs, return_outputs=False):
+    def compute_loss(self, model, inputs, return_outputs=False, **kwargs):
         """
         Focal Loss: https://arxiv.org/abs/1708.02002
         """
@@ -209,7 +241,10 @@ class CustomTrainer(Trainer):
         labels = inputs.get("labels")
         outputs = model(**inputs)
         logits = outputs.get("logits")
-        loss_fct = torch.nn.CrossEntropyLoss(weight=torch.tensor(self.class_weights)).to("cuda")
+        class_weights = torch.as_tensor(
+            self.class_weights, device=logits.device, dtype=logits.dtype,
+        )
+        loss_fct = torch.nn.CrossEntropyLoss(weight=class_weights)
         BCEloss = loss_fct(logits.view(-1, model.config.num_labels), labels.view(-1))
 
         # Focal Loss

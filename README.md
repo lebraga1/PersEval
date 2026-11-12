@@ -122,6 +122,12 @@ We fine-tuned RoBERTa, customized implementing Focal Loss.
 We added annotators' identifiers and their traits to the text embedding as a special token. The model input thus concatenates the annotator id, a special token for each of the annotator's traits, and the input text to classify. 
 The model is then trained with a classification head to predict the binary label.
 
+Encoder training holds out 10% of training instances (user–text annotations) for
+validation, using `config.seed`. The fraction is configurable through
+`config.validation_percentage` or `model.train(validation_percentage=0.1)`.
+The checkpoint with the lowest validation loss is restored at the end of training;
+final metrics are computed on the test set using that model.
+
 ### Decoder-based 
 We chose open-source models of medium size: Mixtral-8 7B and Llama-3.1 8B, both instruction tuned. We considered three possible settings: 
 
