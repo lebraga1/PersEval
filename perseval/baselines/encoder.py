@@ -6,6 +6,7 @@ from transformers import AutoTokenizer, AutoModelForSequenceClassification, \
     Trainer, set_seed, TrainingArguments
 from datasets import Dataset
 import torch
+from sklearn.metrics import f1_score
 from sklearn.model_selection import train_test_split
 from sklearn.utils import compute_class_weight
 import numpy as np
@@ -22,6 +23,21 @@ def _split_training_indices(annotations, validation_percentage, seed):
     return train_test_split(
         np.arange(len(annotations)), test_size=validation_percentage, random_state=seed,
     )
+
+
+def _compute_f1(eval_prediction):
+    """Compute positive-class F1 for binary models, macro-F1 for multiclass."""
+    logits = eval_prediction.predictions
+    if isinstance(logits, tuple):
+        logits = logits[0]
+    num_labels = logits.shape[-1]
+    return {
+        "f1": f1_score(
+            eval_prediction.label_ids, np.argmax(logits, axis=-1),
+            average="binary" if num_labels == 2 else "macro",
+            labels=np.arange(num_labels), pos_label=1, zero_division=0,
+        )
+    }
 
 
 def _compute_balanced_class_weights(labels, num_labels):
@@ -83,7 +99,7 @@ class PerspectivistEncoder():
     def train(self, *, validation_percentage=None):
         """Train with an instance-level validation holdout (10% by default).
 
-        Validation selects the checkpoint; predict() still uses the test set.
+        Validation F1 selects the checkpoint; predict() still uses the test set.
         The original dataset's training, adaptation and test splits are unchanged.
         """
         if validation_percentage is None:
@@ -121,8 +137,8 @@ class PerspectivistEncoder():
             "eval_strategy": "epoch",
             "save_strategy": "epoch",
             "load_best_model_at_end": True,
-            "metric_for_best_model": "eval_loss",
-            "greater_is_better": False,
+            "metric_for_best_model": "eval_f1",
+            "greater_is_better": True,
             "per_device_eval_batch_size": 32,
             "save_total_limit": 1,
             **config.model_config[self.model_id],
@@ -135,17 +151,21 @@ class PerspectivistEncoder():
             args=training_args,
             train_dataset=train_dataset,
             eval_dataset=validation_dataset,
+            compute_metrics=_compute_f1,
         )
         trainer.set_class_weights(class_weights)
         trainer.train()
         if training_args.load_best_model_at_end and trainer.state.best_model_checkpoint is not None:
             best_step = int(trainer.state.best_model_checkpoint.rsplit("-", 1)[-1])
+            metric_key = training_args.metric_for_best_model
+            if not metric_key.startswith("eval_"):
+                metric_key = "eval_" + metric_key
             best_epoch = next(
                 row["epoch"] for row in trainer.state.log_history
-                if row.get("step") == best_step and "eval_loss" in row
+                if row.get("step") == best_step and metric_key in row
             )
             print("Selected epoch:", best_epoch,
-                  "| Validation loss:", trainer.state.best_metric)
+                  f"| {metric_key}:", trainer.state.best_metric)
             print("Selected checkpoint:", trainer.state.best_model_checkpoint)
         return trainer
     

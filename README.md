@@ -125,8 +125,9 @@ The model is then trained with a classification head to predict the binary label
 Encoder training holds out 10% of training instances (user–text annotations) for
 validation, using `config.seed`. The fraction is configurable through
 `config.validation_percentage` or `model.train(validation_percentage=0.1)`.
-The checkpoint with the lowest validation loss is restored at the end of training;
-final metrics are computed on the test set using that model.
+The checkpoint with the highest validation F1 is restored at the end of training
+(positive-class F1 for binary datasets, macro-F1 for multiclass datasets).
+Final metrics are computed on the test set using that model.
 
 ### Decoder-based 
 We chose open-source models of medium size: Mixtral-8 7B and Llama-3.1 8B, both instruction tuned. We considered three possible settings: 

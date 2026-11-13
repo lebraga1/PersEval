@@ -7,7 +7,7 @@ import numpy as np
 import pandas as pd
 import pytest
 import torch
-from transformers import BertConfig, BertForSequenceClassification
+from transformers import BertConfig, BertForSequenceClassification, EvalPrediction
 
 from perseval import config
 from perseval.baselines import encoder
@@ -67,6 +67,23 @@ def test_invalid_validation_percentage_is_rejected(percentage):
 def test_validation_requires_multiple_instances(instance_count):
     with pytest.raises(ValueError, match="at least two training instances"):
         encoder._split_training_indices([{}] * instance_count, 0.1, seed=42)
+
+
+@pytest.mark.parametrize("labels,predictions,num_labels,expected", [
+    ([0, 0, 1, 1], [0, 0, 0, 1], 2, 2 / 3),
+    ([0, 0], [0, 0], 2, 0.0),
+    ([0, 1, 2], [0, 2, 2], 3, 5 / 9),
+    ([0, 0], [0, 0], 3, 1 / 3),
+])
+@pytest.mark.parametrize("tuple_predictions", [False, True])
+def test_f1_matches_the_reporting_class_average(
+    labels, predictions, num_labels, expected, tuple_predictions,
+):
+    logits = np.eye(num_labels)[predictions]
+    if tuple_predictions:
+        logits = (logits, np.zeros(1))
+    metrics = encoder._compute_f1(EvalPrediction(logits, np.asarray(labels)))
+    assert metrics["f1"] == pytest.approx(expected)
 
 
 class TinyTokenizer:
@@ -132,10 +149,15 @@ def test_training_restores_earlier_best_checkpoint_and_predicts_on_test(
                 self.last_epoch_weights = {
                     name: value.clone() for name, value in self.model.state_dict().items()
                 }
-            metrics = super().evaluate(*args, **kwargs)
-            # Force an earlier best epoch to exercise restoration, not just final saving.
-            metrics["eval_loss"] = [0.3, 0.1, 0.4][round(self.state.epoch) - 1]
-            return metrics
+            return super().evaluate(*args, **kwargs)
+
+        def log(self, logs, *args, **kwargs):
+            if "eval_f1" in logs:
+                # Highest F1 is at epoch 2, while lowest loss is at epoch 3.
+                epoch = round(self.state.epoch) - 1
+                logs["eval_f1"] = [0.4, 0.8, 0.5][epoch]
+                logs["eval_loss"] = [0.1, 0.2, 0.05][epoch]
+            return super().log(logs, *args, **kwargs)
 
     monkeypatch.setattr(encoder, "CustomTrainer", ControlledValidationTrainer)
     trainer = model.train(validation_percentage=validation_percentage)
@@ -144,13 +166,17 @@ def test_training_restores_earlier_best_checkpoint_and_predicts_on_test(
     assert len(trainer.train_dataset) == 40 - validation_count
     assert trainer.args.eval_strategy.value == "epoch"
     assert trainer.args.load_best_model_at_end is True
-    assert trainer.args.metric_for_best_model == "eval_loss"
-    assert trainer.args.greater_is_better is False
+    assert trainer.args.metric_for_best_model == "eval_f1"
+    assert trainer.args.greater_is_better is True
+    assert trainer.compute_metrics is encoder._compute_f1
     assert trainer.args.per_device_eval_batch_size == 4
     assert trainer.args.save_total_limit == save_total_limit
     assert trainer.state.epoch == 3
-    assert trainer.state.best_metric == 0.1
-    assert len([row for row in trainer.state.log_history if "eval_loss" in row]) == 3
+    assert trainer.state.best_metric == 0.8
+    evaluations = [row for row in trainer.state.log_history if "eval_f1" in row]
+    assert len(evaluations) == 3
+    assert max(evaluations, key=lambda row: row["eval_f1"])["epoch"] == 2
+    assert min(evaluations, key=lambda row: row["eval_loss"])["epoch"] == 3
     assert "Selected epoch: 2.0" in capsys.readouterr().out
 
     best = BertForSequenceClassification.from_pretrained(trainer.state.best_model_checkpoint)

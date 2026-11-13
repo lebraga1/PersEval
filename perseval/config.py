@@ -83,12 +83,12 @@ dataset_label ={
 model_config = {
     "roberta-base": {
         "eval_strategy": "epoch",
-        "greater_is_better":False,
+        "greater_is_better":True,
         "learning_rate": 5e-6,
         "load_best_model_at_end": True,
         "logging_dir": str(output_root / "logs"),
         "logging_strategy": "epoch",
-        "metric_for_best_model":"eval_loss",
+        "metric_for_best_model":"eval_f1",
         "num_train_epochs": 5,
         "output_dir": str(output_root / "checkpoints"),
         "overwrite_output_dir": True,
