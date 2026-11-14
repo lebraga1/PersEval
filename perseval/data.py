@@ -1,10 +1,12 @@
 import logging as log
 from random import seed
 from dataclasses import dataclass  
+from functools import partial
 import copy                                             
 
 from tqdm import tqdm
 import numpy as np
+import yaml
 from datasets import Dataset, load_dataset, concatenate_datasets, load_from_disk
 
 from . import config
@@ -14,18 +16,9 @@ import os
 from pathlib import Path
 
 def local_dataset_path(relative_path):
-    root = os.environ.get("PERSEVAL_DATA_DIR") # PERSEVAL_DATA_DIR as an env var 
-
-    if not root:
-        raise FileNotFoundError(
-            "Set PERSEVAL_DATA_DIR to the folder containing the local datasets."
-        )
-
-    path = Path(root).expanduser() / relative_path
-
+    path = Path(os.environ.get("PERSEVAL_DATA_DIR", "data")).expanduser() / relative_path
     if not path.exists():
-        raise FileNotFoundError(f"Dataset not found: {path}")
-
+        raise FileNotFoundError(f"Dataset not found: {path}. Set PERSEVAL_DATA_DIR to the folder with the local datasets.")
     return str(path)
 
 log.basicConfig(
@@ -410,314 +403,222 @@ class User:
 
 
 @dataclass
-class Epic(PerspectivistDataset):
-    def __init__(self, label=None):
-        super(Epic, self).__init__()
-        self.name = "EPIC"
-        self.label = label or config.dataset_label[self.name]
-        dataset = load_dataset("Multilingual-Perspectivist-NLU/EPIC")
-        self.dataset = dataset["train"]
-        self.dataset = self.dataset.map(lambda x: {"label": config.label_map[label][x["label"]]})
-        self.label = config.dataset_label[self.name]
-        self.labels[self.label] = set()
-        self.key_user = 'user'
-        self.key_text = 'id_original'
+class ConfigDataset(PerspectivistDataset):
+    REQUIRED = ["source", "annotator_column", "text_id_column", "text_columns", "labels"]
+    LABEL_PREFIX = "__label__"
 
-    def read_text(self, row):
-        return {"post": row['parent_text'], "reply": row['text']}
+    def __init__(self, name, label=None):
+        super(ConfigDataset, self).__init__()
+        if name not in config.dataset_specs:
+            raise ValueError(f"No dataset '{name}' in config.dataset_specs. Available: {', '.join(config.dataset_specs)}")
+        self.name = name
+        self.spec = spec = config.dataset_specs[name]
+        self.check_spec(name, spec)
+        self.label = label or next(iter(spec["labels"]))
+        if self.label not in spec["labels"]:
+            raise ValueError(f"{name} has no label '{self.label}'. Available labels: {', '.join(spec['labels'])}")
+        self.missing_values = set(spec.get("missing_values", []))
 
-    def read_labels(self, row):
-        return {self.label: row['label']}
+        df = self._load(spec["source"])
+        if "prepare" in spec:
+            df = spec["prepare"](df)
+        self._check_columns(df)
+        df = df.dropna(subset=[c for rule in spec["labels"].values() for c in self._label_columns(rule)])
+        text_columns = list(spec["text_columns"].values())
+        df = df.dropna(subset=text_columns, how="all")
+        df[text_columns] = df[text_columns].fillna("")
 
-    def read_traits(self, row):
-        traits = {"Gender": row['Sex'], "Nationality": row['Nationality']}
+        self.key_user = spec["annotator_column"]
+        self.key_text = spec["text_id_column"]
+        if isinstance(self.key_text, list):
+            df["text_id"] = df[self.key_text].astype(str).agg("_".join, axis=1)
+            self.key_text = "text_id"
+        if spec.get("same_text_columns"):
+            df["text_id"] = df.groupby(spec["same_text_columns"], dropna=False)[self.key_text].transform("min")
+            self.key_text = "text_id"
+        self.key_group = spec.get("group_column")
+        if spec.get("drop_duplicate_annotations"):
+            df = df.drop_duplicates([self.key_user, self.key_text])
+
+        for label_name, rule in spec["labels"].items():
+            if "positive_if_any" in rule:
+                values = (df[rule["positive_if_any"]] > 0).any(axis=1).astype(int).tolist()
+            else:
+                values = [self._label_value(label_name, rule, v) for v in df[rule["column"]]]
+            df[self.LABEL_PREFIX + label_name] = values
+            self.labels[label_name] = set()
+        # empty cells become None, as in a Hugging Face dataset
+        for column in df.columns[df.isna().any()]:
+            df[column] = df[column].astype(object).where(df[column].notna(), None)
+        self.dataset = Dataset.from_pandas(df, preserve_index=False)
+        self._check_annotations(df)
+
+    @classmethod
+    def check_spec(cls, name, spec):
+        if not isinstance(spec, dict):
+            raise ValueError(f"{name} must be described by keys and values, e.g. 'source', 'labels'.")
+        missing = [key for key in cls.REQUIRED if key not in spec]
+        if missing:
+            raise ValueError(f"{name} has no {', '.join(missing)}.")
+        if not isinstance(spec["source"], dict):
+            raise ValueError(f"The source of {name} must name its type, e.g. {{'csv': path}} or {{'huggingface': repository}}.")
+
+    def _load(self, source):
+        if "huggingface" in source:
+            data = load_dataset(source["huggingface"])
+            splits = source.get("split", "train")
+            splits = [splits] if isinstance(splits, str) else splits
+            return concatenate_datasets([data[split] for split in splits]).to_pandas()
+        if "csv" in source:
+            return load_dataset("csv", data_files=self._path(source["csv"]),
+                                delimiter=source.get("separator", ","))["train"].to_pandas()
+        if "disk" in source:
+            return load_from_disk(self._path(source["disk"])).to_pandas()
+        raise ValueError(f"The source of {self.name} needs a 'huggingface', 'csv' or 'disk' key.")
+
+    @staticmethod
+    def _path(path):
+        return path if "://" in path or os.path.isabs(path) else local_dataset_path(path)
+
+    def _check_columns(self, df):
+        spec = self.spec
+        text_id = spec["text_id_column"]
+        needed = {"annotator_column": [spec["annotator_column"]],
+                  "text_id_column": text_id if isinstance(text_id, list) else [text_id],
+                  "same_text_columns": spec.get("same_text_columns", []),
+                  "text_columns": list(spec["text_columns"].values()),
+                  "labels": [c for rule in spec["labels"].values() for c in self._label_columns(rule)],
+                  "traits": [rule["column"] for rule in spec.get("traits", {}).values()],
+                  "group_column": [spec["group_column"]] if spec.get("group_column") else []}
+        unknown = [f"'{column}' ({key})" for key, columns in needed.items() for column in columns if column not in df.columns]
+        if unknown:
+            raise ValueError(f"{self.name}: no column {', '.join(unknown)} in the data. "
+                             f"Available columns: {', '.join(map(str, df.columns))}")
+
+    def _check_annotations(self, df):
+        pairs = list(zip(df[self.key_user], df[self.key_text]))
+        repeated = len(pairs) - len(set(pairs))
+        if repeated:
+            log.warning("%s: %d annotations repeat an (annotator, text) pair. "
+                        "Set drop_duplicate_annotations if this is expected.", self.name, repeated)
+        if len({text for _, text in pairs}) == len(pairs):
+            log.warning("%s: no text has more than one annotation. Does '%s' number the rows "
+                        "instead of identifying the texts? If so, list the columns that identify "
+                        "a text in same_text_columns.", self.name, self.key_text)
+        for dimension, rule in self.spec.get("traits", {}).items():
+            values = {self._trait_value(rule, v) for v in df[rule["column"]].unique()} - {None, UNKNOWN_TRAIT}
+            by_case = {}
+            for value in values:
+                by_case.setdefault(str(value).strip().lower(), set()).add(value)
+            clashes = [sorted(map(str, group)) for group in by_case.values() if len(group) > 1]
+            if clashes:
+                log.warning("%s: trait '%s' has values that differ only in case or spaces: %s. "
+                            "Add \"lowercase\": True or a 'values' table.", self.name, dimension, clashes)
+
+    @staticmethod
+    def _label_columns(rule):
+        return rule["positive_if_any"] if "positive_if_any" in rule else [rule["column"]]
+
+    def _label_value(self, label_name, rule, value):
+        if "values" in rule:
+            if value not in rule["values"]:
+                raise ValueError(f"{self.name}: value {value!r} of column '{rule['column']}' is not in "
+                                 f"the 'values' of label '{label_name}'.")
+            return rule["values"][value]
+        if "positive_if_at_least" in rule:
+            return int(value >= rule["positive_if_at_least"])
         try:
-            traits["Generation"] = self.__convert_age(int(row['Age']))
+            number = float(value)
+        except (TypeError, ValueError):
+            raise ValueError(f"{self.name}: value {value!r} of label '{label_name}' is not a number. "
+                             "Add a 'values' table or 'positive_if_at_least'.") from None
+        if not number.is_integer():
+            raise ValueError(f"{self.name}: value {value!r} of label '{label_name}' is not a whole number. "
+                             "Labels are classes 0, 1, ...: add 'positive_if_at_least' or a 'values' table.")
+        return int(number)
+
+    def _trait_value(self, rule, value):
+        if value is None or value in self.missing_values:
+            return None if self.spec.get("missing_traits") == "skip" else UNKNOWN_TRAIT
+        try:
+            if rule.get("age_to_generation"):
+                year = rule["age_to_generation"]
+                return age_to_generation(int(value), 2022 if year is True else year)
+            if rule.get("integer"):
+                value = int(value)
         except ValueError:
-            traits["Generation"] = UNKNOWN_TRAIT
-        return traits
-
-    def __convert_age(self, age):
-        """Function to convert the age, represented as an integer,
-        into a label, according to Table 1 in the paper
-        'EPIC: Multi-Perspective Annotation of a Corpus of Irony'
-        https://aclanthology.org/2023.acl-long.774/
-        """
-        if age >= 58:
-            return "Boomer"
-        elif age >= 42:
-            return "GenX"
-        elif age >= 26:
-            return "GenY"
-        else:
-            return "GenZ"
-
-
-@dataclass
-class Brexit(PerspectivistDataset):
-    def __init__(self, label=None):
-        super(Brexit, self).__init__()
-        self.name = "BREXIT"
-        dataset = load_dataset("silvia-casola/BREXIT")
-        self.dataset = concatenate_datasets([dataset["train"], dataset["validation"], dataset["test"]])
-        labels = ["hs", "offensiveness", "aggressiveness", "stereotype"]
-        self.label = label or config.dataset_label[self.name]
-        for label in labels:
-            self.labels[label] = set()
-        self.key_user = 'annotator_id'
-        self.key_text = 'instance_id'
-        self.key_group = 'annotator_group'
+            return UNKNOWN_TRAIT
+        if rule.get("lowercase"):
+            value = str(value).lower()
+        return rule["values"].get(value, UNKNOWN_TRAIT) if "values" in rule else value
 
     def read_text(self, row):
-        return {"tweet": row['tweet']}
+        return {name: row[column] for name, column in self.spec["text_columns"].items()}
 
     def read_labels(self, row):
-        return {label: row[label] for label in self.labels}
+        return {name: row[self.LABEL_PREFIX + name] for name in self.labels}
 
     def read_traits(self, row):
-        return {"Group": row['annotator_group']}
-
-
-@dataclass
-class DICES(PerspectivistDataset):
-    def __init__(self, label=None):
-        super(DICES, self).__init__()
-        self.name = "DICES"
-        self.label = label or config.dataset_label[self.name]
-        self.dataset = load_from_disk("data/diverse_safety_adversarial_dialog_350_enhanced")
-        self.dataset = self.dataset.map(lambda x: {label: config.label_map[label][x[label]]})
-        self.labels[self.label] = set()
-        self.key_user = 'rater_id'
-        self.key_text = 'text_id'
-
-    def read_text(self, row):
-        return {"context": row['context'], "reply": row['response']}
-
-    def read_labels(self, row):
-        return {self.label: row[self.label]}
-
-    def read_traits(self, row):
-        return {"Gender": row['rater_gender'],
-                "Generation": row['rater_age'],
-                "Race": row['rater_race'],
-                "Education": row['rater_education']}
-
-@dataclass
-class MHS(PerspectivistDataset):
-    EDUCATION = {"college_grad_aa":"educ-high","college_grad_ba":"educ-high","high_school_grad":"educ-low","masters":"educ-high","phd":"educ-high","professional_degree":"educ-low","some_college":"educ-low","some_high_school":"educ-low"}
-    IDEOLOGY = {"conservative":"conservative","extremely_conservative":"conservative","extremely_liberal":"liberal","liberal":"liberal","neutral":"neutral","no_opinion":"neutral","slightly_conservative":"conservative","slightly_liberal":"liberal"}
-    INCOME = {"100k-200k":"income-high","10k-50k":"income-low","<10k":"income-low",">200k":"income-high","50k-100k":"income-high"}
-
-    def __init__(self, label=None):
-        super(MHS, self).__init__()
-        self.name = "MHS"
-        self.label = label or config.dataset_label[self.name]
-        dataset = load_dataset("ucberkeley-dlab/measuring-hate-speech")
-        self.dataset = dataset["train"]
-        self.dataset = self.dataset.map(lambda x: {"hateful": 1 if x["hatespeech"] > 0 else 0})
-        self.labels[self.label] = set()
-        self.key_user = 'annotator_id'
-        self.key_text = 'comment_id'
-
-    def read_text(self, row):
-        return {"post": row['text']}
-
-    def read_labels(self, row):
-        return {"hateful": 1 if row["hatespeech"] > 0 else 0}
-
-    def read_traits(self, row):
+        if not self.spec.get("traits"):
+            raise ValueError(f"{self.name} has no annotator metadata, so named=True is not available.")
         traits = {}
-        # Education
-        if row['annotator_educ'] is not None:
-            traits["Education"] = self.EDUCATION[row['annotator_educ']]
-        # Gender
-        traits["Gender"] = row['annotator_gender']
-        # Ideology
-        if row['annotator_ideology'] is not None:
-            traits["Ideology"] = self.IDEOLOGY[row['annotator_ideology']]
-        # Income
-        if row['annotator_income'] is not None:
-            traits["Income"] = self.INCOME[row['annotator_income']]
-        # Age
-        if row['annotator_age'] is not None:
-            traits["Age"] = self.__convert_age(int(row['annotator_age']))
+        for dimension, rule in self.spec["traits"].items():
+            value = self._trait_value(rule, row[rule["column"]])
+            if value is not None:
+                traits[dimension] = value
         return traits
 
-    def __convert_age(self, age):
-        """Function to convert the age, represented as an integer,
-        into a label. 
-        The annotations were done in 2020, so the labels are based on 2020.
-        """
-        if age >= 56:
-            return "Boomer"
-        elif age >= 40:
-            return "GenX"
-        elif age >= 24:
-            return "GenY"
-        else:
-            return "GenZ"
+
+def age_to_generation(age, year=2022):
+    # born up to 1964, 1980 and 1996
+    if age >= year - 1964:
+        return "Boomer"
+    if age >= year - 1980:
+        return "GenX"
+    if age >= year - 1996:
+        return "GenY"
+    return "GenZ"
 
 
-@dataclass
-class MD(PerspectivistDataset):
-    def __init__(self, label=None):
-        super(MD, self).__init__()
-        self.name = "MD"
-        self.label = label or config.dataset_label[self.name]
-        dataset = load_dataset("csv", data_files="data/MD-Agreement_dataset/MD_agreement.csv")
-        self.dataset = dataset["train"]
-        self.labels[self.label] = set()
-        self.key_user = 'annotators'
-        self.key_text = 'text_id'
+# datasets with a class of their own
+_DATASETS = {}
 
-    def read_text(self, row):
-        return {"text": row['text']}
+# old class names, e.g. DICES(label)
+_CLASS_NAMES = {"Epic": "EPIC", "Brexit": "BREXIT", "DICES": "DICES", "MHS": "MHS", "MD": "MD",
+                "ConvAbuse": "CONVABUSE", "TAS": "TAS", "CSC": "CSC"}
 
-    def read_labels(self, row):
-        return {"offensiveness": row['annotations']}
+def __getattr__(name):
+    if name in _CLASS_NAMES:
+        return partial(ConfigDataset, _CLASS_NAMES[name])
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
-    def read_traits(self, row):
-        raise Exception("Invalid parameter configuration. \
-                            This dataset does not contain any information about the annotators.")
+def _all_datasets():
+    specs = {name.lower(): partial(ConfigDataset, name) for name in config.dataset_specs}
+    return {**specs, **_DATASETS}
 
+def add_dataset(path):
+    """Add the datasets described in a YAML file and return their names.
 
-@dataclass
-class TAS(PerspectivistDataset):
-    EDUCATION = {1: "educ-low", 2: "educ-low", 3: "educ-low", 4: "educ-high", 5: "educ-high", 6: "educ-high"}
-    PARTY = {1: "Republican", 2: "Democrat", 3: "Independent"}
-
-    def __init__(self, label=None):
-        super(TAS, self).__init__()
-        self.name = "TAS"
-        self.label = label or config.dataset_label[self.name]
-        dataset = load_dataset("soda-lmu/tweet-annotation-sensitivity-2")
-        self.dataset = dataset["train"].filter(
-            lambda x: x["hate_speech"] is not None and x["offensive_language"] is not None)
-        for name in ["hate_speech", "offensive_language"]:
-            self.labels[name] = set()
-        self.key_user = 'annotator_id'
-        self.key_text = 'tweet_id'
-
-    def read_text(self, row):
-        return {"tweet": row['tweet_hashed']}
-
-    def read_labels(self, row):
-        return {name: int(row[name]) for name in self.labels}
-
-    def read_traits(self, row):
-        traits = {"Condition": row['condition']}
-        if row['age'] is not None:
-            traits["Generation"] = self.__convert_age(int(row['age']))
-        if row['education'] is not None:
-            traits["Education"] = self.EDUCATION[int(row['education'])]
-        if row['party_affiliation'] is not None:
-            traits["Party"] = self.PARTY[int(row['party_affiliation'])]
-        return traits
-
-    def __convert_age(self, age):
-        if age >= 58:
-            return "Boomer"
-        elif age >= 42:
-            return "GenX"
-        elif age >= 26:
-            return "GenY"
-        else:
-            return "GenZ"
-
-
-@dataclass
-class ConvAbuse(PerspectivistDataset):
-    URL = "https://raw.githubusercontent.com/amandacurry/convabuse/c0a9469f48956e868276c605d499010ea3c7c0d0/1_full/ConvAbuseEMNLPfull.csv"
-    EXCHANGE = ["prev_agent", "prev_user", "agent", "user"]
-
-    def __init__(self, label=None):
-        super(ConvAbuse, self).__init__()
-        self.name = "CONVABUSE"
-        self.label = label or config.dataset_label[self.name]
-        df = load_dataset("csv", data_files=self.URL)["train"].to_pandas()
-        df[self.EXCHANGE] = df[self.EXCHANGE].fillna("")
-        # an exchange labelled by several annotators has one example_no per annotator
-        df["text_id"] = df.groupby(["conv_id"] + self.EXCHANGE, dropna=False)["example_no"].transform("min")
-        # some exchanges were labelled twice by the same annotator
-        df = df.drop_duplicates(["annotator_id", "text_id"])
-        # abusive: -1 to -3; ambiguous (0) and non-abusive (1) are not
-        df[self.label] = (df[["is_abuse.-1", "is_abuse.-2", "is_abuse.-3"]].sum(axis=1) > 0).astype(int)
-        self.dataset = Dataset.from_pandas(df, preserve_index=False)
-        self.labels[self.label] = set()
-        self.key_user = 'annotator_id'
-        self.key_text = 'text_id'
-
-    def read_text(self, row):
-        return {name: row[name] for name in self.EXCHANGE}
-
-    def read_labels(self, row):
-        return {self.label: row[self.label]}
-
-    def read_traits(self, row):
-        raise ValueError("ConvAbuse only describes its annotators as a group, so named=True is not available.")
-
-
-@dataclass
-class CSC(PerspectivistDataset):
-    URL = "https://raw.githubusercontent.com/CoPsyN/CSC/f11c92b8d54686f64cf1d92766cef07201efb986/data_full_w_demo.tsv"
-    GENDER = {"female": "female", "male": "male", "non-binary": "non-binary"}
-    MISSING = {None, "DATA_EXPIRED"}
-
-    def __init__(self, label=None):
-        super(CSC, self).__init__()
-        self.name = "CSC"
-        self.label = label or config.dataset_label[self.name]
-        df = load_dataset("csv", data_files=self.URL, delimiter="\t")["train"].to_pandas()
-        # a text is one speaker's response to one context
-        df["text_id"] = df["global_context_name"].astype(str) + "_" + df["global_speaker"].astype(str)
-        df = df.drop_duplicates(["global_evaluator", "text_id"])
-        # sarcastic: 4 or more on the 1-6 scale, as in Jang and Frassinelli (2024)
-        df[self.label] = (df["sarcasm_score_by_evaluator"] >= 4).astype(int)
-        df = df.astype(object).where(df.notna(), None)
-        self.dataset = Dataset.from_pandas(df, preserve_index=False)
-        self.labels[self.label] = set()
-        self.key_user = 'global_evaluator'
-        self.key_text = 'text_id'
-
-    def read_text(self, row):
-        return {"context": row['context_text'], "response": row['response_text']}
-
-    def read_labels(self, row):
-        return {self.label: row[self.label]}
-
-    def read_traits(self, row):
-        traits = {"Gender": self.GENDER.get(str(row['evaluator_sex']).lower(), UNKNOWN_TRAIT)}
-        age = row['evaluator_age']
-        traits["Generation"] = UNKNOWN_TRAIT if age in self.MISSING else self.__convert_age(int(age))
-        ethnicity = row['evaluator_ethnicity']
-        traits["Ethnicity"] = UNKNOWN_TRAIT if ethnicity in self.MISSING else ethnicity
-        return traits
-
-    def __convert_age(self, age):
-        if age >= 58:
-            return "Boomer"
-        elif age >= 42:
-            return "GenX"
-        elif age >= 26:
-            return "GenY"
-        else:
-            return "GenZ"
-
-
-_DATASETS = {
-    "epic": Epic,
-    "brexit": Brexit,
-    "dices": DICES,
-    "mhs": MHS,
-    "md": MD,
-    "tas": TAS,
-    "convabuse": ConvAbuse,
-    "csc": CSC,
-}
+    Relative paths in a source are read from the folder of the file.
+    """
+    path = Path(path).expanduser().resolve()
+    with open(path, encoding="utf-8") as f:
+        specs = yaml.safe_load(f)
+    if not isinstance(specs, dict) or "source" in specs:
+        raise ValueError(f"{path} must describe each dataset under its name: a line 'MYDATA:' "
+                         "followed by the indented keys.")
+    for name, spec in specs.items():
+        ConfigDataset.check_spec(name, spec)
+        for key in ("csv", "disk"):
+            if key in spec["source"] and "://" not in spec["source"][key]:
+                spec["source"][key] = str(path.parent / Path(spec["source"][key]).expanduser())
+    config.dataset_specs.update(specs)
+    config.dataset_label.update({name: next(iter(spec["labels"])) for name, spec in specs.items()})
+    return list(specs)
 
 def available_datasets():
     """Return the names of all available datasets."""
-    return list(_DATASETS.keys())
+    return list(_all_datasets())
 
 def download(dataset_name, label=None):
     """
@@ -741,14 +642,16 @@ def download(dataset_name, label=None):
 
     dataset_name = dataset_name.lower()
 
-    if dataset_name not in _DATASETS:
-        available = ", ".join(_DATASETS.keys())
+    datasets = _all_datasets()
+
+    if dataset_name not in datasets:
+        available = ", ".join(datasets)
         raise ValueError(
             f"Unknown dataset '{dataset_name}'. "
             f"Available datasets: {available}"
         )
 
-    return _DATASETS[dataset_name](label)    
+    return datasets[dataset_name](label)
 
 def download_and_split(
     dataset_name,
@@ -803,7 +706,7 @@ def describe_datasets(verbose=False):
 
     descriptions = {}
 
-    for name in _DATASETS:
+    for name in _all_datasets():
         dataset = download(name)
         descriptions[name] = dataset.describe(verbose=verbose)
 

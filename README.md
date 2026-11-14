@@ -74,7 +74,7 @@ perspectivist_dataset.get_splits(user_adaptation="train", extended=True, named=F
 The difference between the task variants manifests in different training splits (or in some cases additional sets when using an adaptation set at inference time), while **the test set depends uniquely on the chosen dataset and it remains the same across all task variants.**
 
 ### How the splits are computed
-Test users must be disjoint from training users and, without `--extended`, test texts must be disjoint from training texts. On a dense dataset (many annotators per text) almost every text is annotated by some test user, so a split by user alone would leave nothing to train on.
+Test users must be disjoint from training users and, with `extended=False`, test texts must be disjoint from training texts. On a dense dataset (many annotators per text) almost every text is annotated by some test user, so a split by user alone would leave nothing to train on.
 
 Datasets are therefore split automatically (`perseval/splitting.py`):
 1. 20% of the annotators become test users, sampled among those with enough annotations to be evaluated (optionally stratified by an annotator column, e.g. BREXIT's groups).
@@ -100,7 +100,7 @@ The library comes with eight datasets.
 | ConvAbuse | [Cercas Curry et al. 2021](https://aclanthology.org/2021.emnlp-main.587/) | Abuse towards conversational agents | 8 | --- | 
 | CSC | [Jang and Frassinelli 2024](https://aclanthology.org/2024.naacl-long.238/) | Sarcasm | 838 | Gender, Age/Generation, Ethnicity | 
 
-BREXIT, EPIC, MHS and TAS are directly loaded from Hugging Face, ConvAbuse and CSC from a fixed commit of their GitHub repositories, while DICES and MD-Agreement are loaded from the directory configured through the `PERSEVAL_DATA_DIR` environment variable.
+BREXIT, EPIC, MHS and TAS are directly loaded from Hugging Face, ConvAbuse and CSC from a fixed commit of their GitHub repositories, while DICES and MD-Agreement are loaded from the directory configured through the `PERSEVAL_DATA_DIR` environment variable (`./data` by default).
 
 In ConvAbuse an utterance is abusive when rated from -1 to -3 (ambiguous and non-abusive are not). In CSC a response is sarcastic when rated 4 ("somewhat") or more on the 1-6 scale, as in the original paper.
 
@@ -123,6 +123,84 @@ Options for labels are listed below:
 # CONVABUSE -> ["abuse"]
 # CSC    -> ["sarcasm"]
 ```
+
+### Adding a dataset
+
+A dataset is an entry of `dataset_specs` in [`perseval/config.py`](perseval/config.py), where all the datasets of the library are described. If the data has one row per annotation (an annotator labelling a text), the entry needs no code:
+
+```python
+from perseval import config
+import perseval
+
+config.dataset_specs["MYDATA"] = {
+    "source": {"csv": "https://example.org/mydata.csv"},
+    "annotator_column": "annotator",
+    "text_id_column": "text_id",
+    "text_columns": {"text": "text"},
+    "labels": {"offensive": {"column": "score", "positive_if_at_least": 3}},
+    "traits": {"Generation": {"column": "age", "age_to_generation": True}},
+}
+
+dataset = perseval.download_and_split("mydata", user_adaptation="test")
+```
+
+Assigning to `config.dataset_specs` adds the dataset for the current session; to make it permanent, add the entry to `perseval/config.py`.
+
+The same entry can be written in a YAML file, which needs no Python and also works when PersEval is installed with `pip`:
+
+```yaml
+MYDATA:
+  source:
+    csv: mydata.csv
+  annotator_column: annotator
+  text_id_column: text_id
+  text_columns:
+    text: text
+  labels:
+    offensive:
+      column: score
+      positive_if_at_least: 3
+  traits:
+    Generation:
+      column: age
+      age_to_generation: true
+```
+
+```python
+import perseval
+
+perseval.add_dataset("mydata.yaml")
+dataset = perseval.download_and_split("mydata", user_adaptation="test")
+```
+
+A file can describe several datasets, one under each name. Relative paths are read from the folder of the YAML file. `prepare` is only available in Python.
+
+The keys are the same in Python and in YAML:
+
+| Key | Value |
+| ------------- | ------------- |
+| `source` | `{"huggingface": repository}`, optionally with `"split"` (a name or a list of splits to join), `{"csv": path or URL}`, optionally with `"separator"`, or `{"disk": path}` for a dataset saved with `save_to_disk`. Relative paths are read from `PERSEVAL_DATA_DIR`, `./data` by default |
+| `annotator_column` | Column with the annotator id |
+| `text_id_column` | Column with the text id, or a list of columns to join |
+| `same_text_columns` | Optional, for a `text_id_column` that numbers the rows instead of the texts: rows that agree on these columns are one text, with the smallest number as its id (see CONVABUSE) |
+| `text_columns` | `{field shown to the model: column}` |
+| `labels` | `{label: rule}`, the first one is the default. Rows without a label are dropped |
+| `traits` | Optional, `{trait: rule}`. Without it, `named=True` is not available |
+| `missing_values` | Optional, values that mean unknown besides empty cells |
+| `missing_traits` | Optional, `"unknown"` (default) gives the trait the value `UNK`, `"skip"` leaves it out |
+| `drop_duplicate_annotations` | Optional, keeps the first label of an annotator for a text |
+| `group_column` | Optional, annotator group used to stratify the test users |
+| `prepare` | Optional, a Python function that receives the data as a pandas DataFrame and returns it, for data in another shape (e.g. one column per annotator) |
+
+A label rule is one of:
+- `{"column": c}`: the value is the class, a whole number (`True`/`False` become 1/0);
+- `{"column": c, "values": {...}}`: the value is looked up in the table, e.g. `{"iro": 1, "not": 0}`;
+- `{"column": c, "positive_if_at_least": n}`: 1 if the value is `n` or more, else 0;
+- `{"positive_if_any": [c1, c2, ...]}`: 1 if any of the columns is greater than 0, else 0.
+
+A trait rule is `{"column": c}`, plus `"values": {...}` (values not in the table become `UNK`), `"integer": True`, `"lowercase": True` or `"age_to_generation": True`. The generation assumes the annotation was done in 2022; give the year instead of `True` otherwise, e.g. `"age_to_generation": 2020`.
+
+Rows without any text are dropped, and a text field that is empty in some rows (e.g. the first turn of a conversation) is shown as an empty string. Wrong column names raise an error that lists the available columns. Loading warns about annotations that repeat an (annotator, text) pair, text ids that never repeat and trait values that differ only in case.
 
 ## 📈 Metrics
 

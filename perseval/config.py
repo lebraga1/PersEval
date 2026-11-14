@@ -15,21 +15,133 @@ auto_split = {
     "min_adaptation_annotations": 1,
 }
 
+# keys explained in "Adding a dataset" in the README
+dataset_specs = {
+    "EPIC": {
+        "source": {"huggingface": "Multilingual-Perspectivist-NLU/EPIC"},
+        "annotator_column": "user",
+        "text_id_column": "id_original",
+        "text_columns": {"post": "parent_text", "reply": "text"},
+        "labels": {"irony": {"column": "label", "values": {"iro": 1, "not": 0}}},
+        "traits": {
+            "Gender": {"column": "Sex"},
+            "Nationality": {"column": "Nationality"},
+            "Generation": {"column": "Age", "age_to_generation": True},
+        },
+        "missing_values": ["DATA_EXPIRED"],
+    },
+    "BREXIT": {
+        "source": {"huggingface": "silvia-casola/BREXIT", "split": ["train", "validation", "test"]},
+        "annotator_column": "annotator_id",
+        "text_id_column": "instance_id",
+        "text_columns": {"tweet": "tweet"},
+        "labels": {
+            "hs": {"column": "hs"},
+            "offensiveness": {"column": "offensiveness"},
+            "aggressiveness": {"column": "aggressiveness"},
+            "stereotype": {"column": "stereotype"},
+        },
+        "traits": {"Group": {"column": "annotator_group"}},
+        "group_column": "annotator_group",
+    },
+    "DICES": {
+        "source": {"disk": "diverse_safety_adversarial_dialog_350_enhanced"},
+        "annotator_column": "rater_id",
+        "text_id_column": "text_id",
+        "text_columns": {"context": "context", "reply": "response"},
+        "labels": {"Q2_harmful_content_overall": {"column": "Q2_harmful_content_overall",
+                                                  "values": {"Yes": 2, "Unsure": 1, "No": 0}}},
+        "traits": {
+            "Gender": {"column": "rater_gender"},
+            "Generation": {"column": "rater_age"},
+            "Race": {"column": "rater_race"},
+            "Education": {"column": "rater_education"},
+        },
+    },
+    "MHS": {
+        "source": {"huggingface": "ucberkeley-dlab/measuring-hate-speech"},
+        "annotator_column": "annotator_id",
+        "text_id_column": "comment_id",
+        "text_columns": {"post": "text"},
+        "labels": {"hateful": {"column": "hatespeech", "positive_if_at_least": 1}},
+        "traits": {
+            "Education": {"column": "annotator_educ", "values": {
+                "college_grad_aa": "educ-high", "college_grad_ba": "educ-high", "masters": "educ-high", "phd": "educ-high",
+                "high_school_grad": "educ-low", "professional_degree": "educ-low", "some_college": "educ-low",
+                "some_high_school": "educ-low"}},
+            "Gender": {"column": "annotator_gender"},
+            "Ideology": {"column": "annotator_ideology", "values": {
+                "conservative": "conservative", "extremely_conservative": "conservative", "slightly_conservative": "conservative",
+                "liberal": "liberal", "extremely_liberal": "liberal", "slightly_liberal": "liberal",
+                "neutral": "neutral", "no_opinion": "neutral"}},
+            "Income": {"column": "annotator_income", "values": {
+                "<10k": "income-low", "10k-50k": "income-low",
+                "50k-100k": "income-high", "100k-200k": "income-high", ">200k": "income-high"}},
+            # annotated in 2020
+            "Age": {"column": "annotator_age", "age_to_generation": 2020},
+        },
+        "missing_traits": "skip",
+    },
+    "MD": {
+        "source": {"csv": "MD-Agreement_dataset/MD_agreement.csv"},
+        "annotator_column": "annotators",
+        "text_id_column": "text_id",
+        "text_columns": {"text": "text"},
+        "labels": {"offensiveness": {"column": "annotations"}},
+    },
+    "CONVABUSE": {
+        "source": {"csv": "https://raw.githubusercontent.com/amandacurry/convabuse/c0a9469f48956e868276c605d499010ea3c7c0d0/1_full/ConvAbuseEMNLPfull.csv"},
+        "annotator_column": "annotator_id",
+        "text_id_column": "example_no",
+        "same_text_columns": ["conv_id", "prev_agent", "prev_user", "agent", "user"],
+        "text_columns": {"prev_agent": "prev_agent", "prev_user": "prev_user", "agent": "agent", "user": "user"},
+        "labels": {"abuse": {"positive_if_any": ["is_abuse.-1", "is_abuse.-2", "is_abuse.-3"]}},
+        "drop_duplicate_annotations": True,
+    },
+    "TAS": {
+        "source": {"huggingface": "soda-lmu/tweet-annotation-sensitivity-2"},
+        "annotator_column": "annotator_id",
+        "text_id_column": "tweet_id",
+        "text_columns": {"tweet": "tweet_hashed"},
+        "labels": {
+            "hate_speech": {"column": "hate_speech"},
+            "offensive_language": {"column": "offensive_language"},
+        },
+        "traits": {
+            "Condition": {"column": "condition"},
+            "Generation": {"column": "age", "age_to_generation": True},
+            "Education": {"column": "education", "integer": True,
+                          "values": {1: "educ-low", 2: "educ-low", 3: "educ-low", 4: "educ-high", 5: "educ-high", 6: "educ-high"}},
+            "Party": {"column": "party_affiliation", "integer": True,
+                      "values": {1: "Republican", 2: "Democrat", 3: "Independent"}},
+        },
+        "missing_traits": "skip",
+    },
+    "CSC": {
+        "source": {"csv": "https://raw.githubusercontent.com/CoPsyN/CSC/f11c92b8d54686f64cf1d92766cef07201efb986/data_full_w_demo.tsv",
+                   "separator": "\t"},
+        "annotator_column": "global_evaluator",
+        "text_id_column": ["global_context_name", "global_speaker"],
+        "text_columns": {"context": "context_text", "response": "response_text"},
+        "labels": {"sarcasm": {"column": "sarcasm_score_by_evaluator", "positive_if_at_least": 4}},
+        "traits": {
+            "Gender": {"column": "evaluator_sex", "lowercase": True,
+                       "values": {"female": "female", "male": "male", "non-binary": "non-binary"}},
+            "Generation": {"column": "evaluator_age", "age_to_generation": True},
+            "Ethnicity": {"column": "evaluator_ethnicity"},
+        },
+        "missing_values": ["DATA_EXPIRED"],
+        "drop_duplicate_annotations": True,
+    },
+}
+
+dataset_label ={name: next(iter(spec["labels"])) for name, spec in dataset_specs.items()}
+
 padding="max_length"
 truncation=True
 max_length=512
 
 prediction_dir = "predictions"
-
-
-
-dataset_label ={
-    "EPIC": "irony",
-    "DICES":"Q2_harmful_content_overall",
-    "BREXIT":"hs",
-    "MHS":"hateful",
-    "MD":"offensiveness"
-}
 
 prediction_dir_llama = "predictions_llama"
 prediction_dir_mixtral = "predictions_mixtral"
@@ -43,25 +155,6 @@ label_map = {
     "Q2_harmful_content_overall_pred": {"yes":2, "unsure":1, "no":0},
     "hateful_pred": {"hateful":1, "not hateful":0},
     "offensiveness_pred": {"offensive":1, "not offensive":0}
-}
-
-# options for label:
-# EPIC   -> ["irony"]
-# BREXIT -> ["hs", "offensiveness", "aggressiveness", "stereotype"]
-# DICES  -> ["degree_of_harm"]
-# MHS    -> ["hateful"]
-# MD     -> ["offensiveness"]
-
-dataset_label ={
-    "EPIC": "irony",
-    "DICES-350":"degree_of_harm",
-    "DICES":"Q2_harmful_content_overall",
-    "BREXIT":"hs",
-    "MHS":"hateful",
-    "MD":"offensiveness",
-    "TAS": "hate_speech",
-    "CONVABUSE": "abuse",
-    "CSC": "sarcasm"
 }
 
 model_config = {
