@@ -570,7 +570,6 @@ class ConfigDataset(PerspectivistDataset):
 
 
 def age_to_generation(age, year=2022):
-    # born up to 1964, 1980 and 1996
     if age >= year - 1964:
         return "Boomer"
     if age >= year - 1980:
@@ -580,10 +579,8 @@ def age_to_generation(age, year=2022):
     return "GenZ"
 
 
-# datasets with a class of their own
 _DATASETS = {}
 
-# old class names, e.g. DICES(label)
 _CLASS_NAMES = {"Epic": "EPIC", "Brexit": "BREXIT", "DICES": "DICES", "MHS": "MHS", "MD": "MD",
                 "ConvAbuse": "CONVABUSE", "TAS": "TAS", "CSC": "CSC"}
 
@@ -597,10 +594,7 @@ def _all_datasets():
     return {**specs, **_DATASETS}
 
 def add_dataset(path):
-    """Add the datasets described in a YAML file and return their names.
-
-    Relative paths in a source are read from the folder of the file.
-    """
+    """Add the datasets described in a YAML file and return their names."""
     path = Path(path).expanduser().resolve()
     with open(path, encoding="utf-8") as f:
         specs = yaml.safe_load(f)

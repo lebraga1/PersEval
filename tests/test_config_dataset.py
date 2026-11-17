@@ -11,13 +11,12 @@ from perseval import config
 from perseval.data import ConfigDataset, UNKNOWN_TRAIT, age_to_generation
 
 ROWS = [
-    # annotator, context, speaker, response, score, sex, age, ethnicity
     ("a1", "c1", "s1", "first", 5, "Male", "30", "White"),
     ("a1", "c1", "s2", "second", 2, "Male", "30", "White"),
-    ("a1", "c1", "s1", "first", 1, "Male", "30", "White"),  # same text again
+    ("a1", "c1", "s1", "first", 1, "Male", "30", "White"),
     ("a2", "c1", "s1", "first", 4, "male", "DATA_EXPIRED", None),
     ("a2", "c1", "s2", "second", 3, "female", "61", "Asian"),
-    ("a3", "c2", "s1", "third", "", "non-binary", "20", "Black"),  # no label
+    ("a3", "c2", "s1", "third", "", "non-binary", "20", "Black"),
 ]
 
 
@@ -143,7 +142,7 @@ def test_numbered_rows_and_label_from_several_columns(tmp_path, monkeypatch):
     path = tmp_path / "conversations.csv"
     lines = ["annotator,conv,prev,turn,row_no,mild,strong",
              "a1,k1,,hi,10,0,0",
-             "a2,k1,,hi,11,1,0",  # same exchange as row 10
+             "a2,k1,,hi,11,1,0",
              "a1,k1,hi,you idiot,12,0,1",
              "a2,k1,hi,you idiot,13,0,0"]
     path.write_text("\n".join(lines) + "\n")

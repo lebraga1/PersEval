@@ -15,7 +15,6 @@ auto_split = {
     "min_adaptation_annotations": 1,
 }
 
-# keys explained in "Adding a dataset" in the README
 dataset_specs = {
     "EPIC": {
         "source": {"huggingface": "Multilingual-Perspectivist-NLU/EPIC"},
@@ -77,7 +76,6 @@ dataset_specs = {
             "Income": {"column": "annotator_income", "values": {
                 "<10k": "income-low", "10k-50k": "income-low",
                 "50k-100k": "income-high", "100k-200k": "income-high", ">200k": "income-high"}},
-            # annotated in 2020
             "Age": {"column": "annotator_age", "age_to_generation": 2020},
         },
         "missing_traits": "skip",
